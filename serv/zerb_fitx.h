@@ -16,12 +16,14 @@
 #define COM_UPLO	5
 #define COM_UPL2	6
 #define COM_DELE	7
-#define COM_EXIT	8
+#define COM_MKDR	8
+#define COM_DDEL	9
+#define COM_EXIT	10
 
 #define MAX_UPLOAD_SIZE	10*1024*1024	// 10 MB
 #define SPACE_MARGIN		50*1024*1024	// 50 MB
 
-char * KOMANDOAK[] = {"USER","PASS","LIST","DOWN","DOW2","UPLO","UPL2","DELE","EXIT",NULL};
+char * KOMANDOAK[] = {"USER","PASS","LIST","DOWN","DOW2","UPLO","UPL2","DELE", "MKDR", "DDEL", "EXIT",NULL};
 char * erab_zer[] = {"sd",NULL};
 char * pass_zer[] = {"sd"};
 int egoera;

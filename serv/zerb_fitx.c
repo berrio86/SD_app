@@ -79,7 +79,7 @@ int main()
 */
 void sesioa(int s)
 {
-	char buf[MAX_BUF], file_path[MAX_BUF], file_name[MAX_BUF];
+	char buf[MAX_BUF], file_path[MAX_BUF], file_name[MAX_BUF], dir_path[MAX_BUF], dir_name[MAX_BUF];
 	int n, erabiltzaile, komando, error;
 	FILE *fp;
 	struct stat file_info;
@@ -286,6 +286,19 @@ void sesioa(int s)
 				else
 					write(s,"ER10\r\n",6);
 				break;
+			case COM_MKDR:
+				if(egoera != ST_MAIN)
+				{
+					ustegabekoa(s);
+					continue;
+				}
+				buf[n-2] = 0; // EOL ezabatu.
+				strcpy(dir_name,buf+4);	// Obtener el nombre del directorio.
+				sprintf(dir_path,"%s/%s",FILES_PATH, dir_name);	// Conseguir el PATH del nuevo directorio.
+				error=mkdir(dir_path, ACCESSPERMS);  // Crear el nuevo directorio.
+				if(error < 0)
+					write(s, "ER11\r\n",6);
+				break;
 			case COM_DELE:
 				if(egoera != ST_MAIN)		// Egiaztatu esperotako egoeran jaso dela komandoa.
 				{
@@ -305,6 +318,8 @@ void sesioa(int s)
 				else
 					write(s,"OK\r\n",4);
 				break;
+			//case COM_DDEL:
+				
 			case COM_EXIT:
 				if(n > 6)	// Egiaztatu ez dela parametrorik jaso.
 				{

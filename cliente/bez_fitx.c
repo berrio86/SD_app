@@ -77,7 +77,7 @@ int main(int argc, char *argv[])
 	wd_cd = inotify_add_watch( fd, directorio, IN_CREATE | IN_DELETE );
 
 	/* Testigo para finalizar cuando lo borremos: */
-	mkdir(testigo, S_IRWXG);
+	mkdir(testigo, ACCESSPERMS);
 	
 	/*read to determine the event change happens on the directory. Actually this read blocks until the change event occurs*/ 
 	struct inotify_event event_st, *event;
@@ -351,16 +351,68 @@ int main(int argc, char *argv[])
 		  if ( event->mask & IN_CREATE ) {
 		    if ( event->mask & IN_ISDIR ) {	// event: directory created
 		      printf( "---%s: New directory %s created.\n", argv[0], event->name );
+		      sprintf(buf,"%s%s\r\n",KOMANDOAK[COM_MKDR], event->name);
+		      write(sock,buf,strlen(buf));		// Enviar petición.
+		      n = readline(sock, buf, MAX_BUF);		// Recibir respuesta.
+		      status = parse(buf);
+		      if(status != 0)
+		      {
+			   fprintf(stderr,"Error: ");
+			   fprintf(stderr,"%s",ER_MEZUAK[status]);
+		      }
 		    }
-		    else {	// event: fie created
+		    else {	// event: file created
 		      printf( "---%s: New file %s created.\n", argv[0], event->name );
+		      strcpy(param, event->name);
+		      if(stat(param, &file_info) < 0)	// Conseguir el tamaño del fichero.
+		      {
+			   fprintf(stderr,"%s fitxategia ez da aurkitu.\n", param);
+		      }
+		      else
+	              {
+			    sprintf(buf,"%s%s?%ld\r\n",KOMANDOAK[COM_UPLO], param, file_info.st_size);
+			    write(sock, buf, strlen(buf));		// Enviar petición.
+			    n = readline(sock, buf, MAX_BUF);		// Recibir respuesta.
+			    status = parse(buf);
+			    if(status != 0)
+			    {
+				  fprintf(stderr,"Error: ");
+				  fprintf(stderr,"%s",ER_MEZUAK[status]);
+			    }
+			    else
+			    {
+				  if((fp = fopen(param,"r")) == NULL)	// Abrir el fichero.
+				  {
+					fprintf(stderr,"El fichero %s no se puede abrir.\n",param);
+					exit(1);
+			          }
+					sprintf(buf,"%s\r\n",KOMANDOAK[COM_UPL2]);
+					write(sock,buf,strlen(buf));	// Confirmar el envío.
+					while((n=fread(buf,1,MAX_BUF,fp))==MAX_BUF)	// Enviar el fichero con el tamaño máximo de bloque.
+						write(sock,buf,MAX_BUF);
+						if(ferror(fp)!=0)
+						{
+							fprintf(stderr,"Se ha producido un error al enviar el fichero.\n");
+							exit(1);
+						}
+						write(sock,buf,n);	// Enviar el último bloque del fichero.
+					
+						n = readline(sock, buf, MAX_BUF);	// Recibir respuesta.
+						status = parse(buf);
+						if(status != 0)
+						{
+							fprintf(stderr,"Error: ");
+							fprintf(stderr,"%s",ER_MEZUAK[status]);
+						}
+			    }
+		       }
 		    }
 		  }
 		  else if ( event->mask & IN_DELETE ) {
 		    if ( event->mask & IN_ISDIR ) {	// event: directory removed
 		      if (!strcmp(event->name, "inotify.example.executing")) {
 		        rmdir("example.inotify.executing");
-		        exiting= 1;
+		        exiting=1;
 	//              break;
 		      }
 		      printf( "---%s: Directory %s deleted.\n", argv[0], event->name );
