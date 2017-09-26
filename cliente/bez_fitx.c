@@ -3,10 +3,12 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <netinet/in.h>
 #include <netdb.h>
-#include <sys/stat.h>
 #include <unistd.h>
+#include <errno.h>
+#include <linux/inotify.h>
 
 #include "bez_fitx.h"
 
@@ -18,6 +20,17 @@ int main(int argc, char *argv[])
 	
 	int sock, n, status, aukera;
 	long fitx_tamaina, irakurrita;
+	
+	//notify 
+	int length, x = 0;
+  	int fd;
+  	int wd;
+  	int wd_cd;
+  	char buffer[EVENT_BUF_LEN];
+  	char testigo[1024];
+  	char directorio[MAX_BUF];
+  	//end notify
+  	
 	struct stat file_info;
 	FILE *fp;
 	struct sockaddr_in zerb_helb;
@@ -26,19 +39,51 @@ int main(int argc, char *argv[])
 	// Parametroak prozesatu.
 	switch(argc)
 	{
+		case 4:
+			portua = atoi(argv[3]);
+			printf("%d \n", portua);
+		case 3:
+			strcpy(zerbitzaria, argv[2]);
+			printf("%s \n", zerbitzaria);
+			break;
+		case 2:
+			strcpy(directorio, argv[1]);
+			printf("%s \n", directorio);
 		case 1:
 			strcpy(zerbitzaria, SERVER);
 			break;
-		case 3:
-			portua = atoi(argv[2]);
-		case 2:
-			strcpy(zerbitzaria, argv[1]);
-			break;
 		default:
-			printf("Erabilera: %s <zerbitzaria> <portua>\n", argv[0]);
+			printf("Erabilera: %s <zerbitzaria> <portua> <directorio>\n", argv[0]);
 			exit(1);
 	}
+	
+	fprintf(stderr, "---Prueba de inotify sobre %s\n", directorio);
+  	fprintf(stderr, "---Notifica crear/borrar ficheros/directorios sobre %s\n", directorio);
+	fprintf(stderr, "---%s debe exixtir!\n", directorio);
+  	fprintf(stderr, "---Para salir, borrar %s/inotify.example.executing\n", directorio); 
 
+  	sprintf(testigo, "%s/inotify.example.executing", directorio);
+  	fprintf(stderr, "      Testigo: %s\n", testigo); 
+	
+	/*creating the INOTIFY instance*/
+	fd = inotify_init();
+
+	/*checking for error*/
+	if ( fd < 0 ) {
+	  perror( "inotify_init" );
+	}
+
+	/* Notificaremos los cambios en el directorio ./My_inotify */
+	wd_cd = inotify_add_watch( fd, directorio, IN_CREATE | IN_DELETE );
+
+	/* Testigo para finalizar cuando lo borremos: */
+	mkdir(testigo, S_IRWXG);
+	
+	/*read to determine the event change happens on the directory. Actually this read blocks until the change event occurs*/ 
+	struct inotify_event event_st, *event;
+	int k=0;
+	int exiting= 0;
+	
 	// Socketa sortu.
 	if((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
 	{
@@ -100,6 +145,8 @@ int main(int argc, char *argv[])
 	} while(1);
 
 	// Begizta bat aukeren menua erakutsi eta aukera prozesatzeko.
+	
+/*
 	do
 	{
 		aukera = menua();		// Erakutsi aukeren menua.
@@ -282,6 +329,64 @@ int main(int argc, char *argv[])
 				break;
 		}
 	} while(aukera != 5);
+*/
+
+	while (!exiting) {
+	    fprintf(stderr, "---%s: waiting for event %d...\n", argv[0], ++k); 
+	    length = read( fd, buffer, EVENT_BUF_LEN ); 
+	    fprintf(stderr, "---%s: event %d read.\n", argv[0], k); 
+	    /*checking for error*/
+	    if ( length < 0 ) {
+		perror( "read" );
+		break;
+	    }
+	//    struct inotify_event *event = ( struct inotify_event * ) &buffer[ i ];
+	    while ( (x < length) && !exiting ) {
+	//    event= &event_st;
+		event = ( struct inotify_event * ) &buffer[ x ];
+	//    fprintf(stderr, "---example: event name length: %i\n", event->len);
+	//    memcpy(event, buffer, length);
+		if ( event->len ) {
+	//      memcpy(event+EVENT_SIZE, buffer+EVENT_SIZE, length);
+		  if ( event->mask & IN_CREATE ) {
+		    if ( event->mask & IN_ISDIR ) {	// event: directory created
+		      printf( "---%s: New directory %s created.\n", argv[0], event->name );
+		    }
+		    else {	// event: fie created
+		      printf( "---%s: New file %s created.\n", argv[0], event->name );
+		    }
+		  }
+		  else if ( event->mask & IN_DELETE ) {
+		    if ( event->mask & IN_ISDIR ) {	// event: directory removed
+		      if (!strcmp(event->name, "inotify.example.executing")) {
+		        rmdir("example.inotify.executing");
+		        exiting= 1;
+	//              break;
+		      }
+		      printf( "---%s: Directory %s deleted.\n", argv[0], event->name );
+		    }
+		    else {	// event: fie removed
+		      printf( "---%s: File %s deleted.\n", argv[0], event->name );
+		    }
+		  }
+		}
+		else {	// event ignored
+		  fprintf(stderr, "---%s: event ignored for %s\n", argv[0], event->name); 
+		}
+		i += EVENT_SIZE + event->len;
+	//    fprintf(stderr, "---example.event count: %i\n", i); 
+	    }
+	    x= 0;
+  	}
+  	
+  	fprintf(stderr, "---Exiting %s\n", argv[0]); 
+	/*removing the directory from the watch list.*/
+	inotify_rm_watch( fd, wd );
+	inotify_rm_watch( fd, wd_cd );
+	//  rmdir(argv[1]);
+
+ 	/*closing the INOTIFY instance*/
+  	close( fd );
 	
 	close(sock);
 }

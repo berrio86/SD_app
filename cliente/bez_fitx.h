@@ -14,9 +14,13 @@
 
 #define OP_LIST	1
 #define OP_DOWN	2
-#define OP_UP		3
+#define OP_UP	3
 #define OP_DEL	4
 #define OP_EXIT	5
+
+#define EVENT_SIZE  ( sizeof (struct inotify_event) )
+//#define EVENT_SIZE  (3*sizeof(uint32_t)+sizeof(int))
+#define EVENT_BUF_LEN     ( 1024 * ( EVENT_SIZE + 16 ) )
 
 
 char * KOMANDOAK[] = {"USER","PASS","LIST","DOWN","DOW2","UPLO","UPL2","DELE","EXIT",NULL};
