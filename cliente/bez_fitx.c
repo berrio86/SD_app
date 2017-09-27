@@ -331,7 +331,7 @@ int main(int argc, char *argv[])
 	} while(aukera != 5);
 */
 
-	while (!exiting) {
+	while (!exiting) { //empezamos escuchar eventos
 	    fprintf(stderr, "---%s: waiting for event %d...\n", argv[0], ++k); 
 	    length = read( fd, buffer, EVENT_BUF_LEN ); 
 	    fprintf(stderr, "---%s: event %d read.\n", argv[0], k); 
@@ -350,25 +350,27 @@ int main(int argc, char *argv[])
 	//      memcpy(event+EVENT_SIZE, buffer+EVENT_SIZE, length);
 		  if ( event->mask & IN_CREATE ) {
 		    if ( event->mask & IN_ISDIR ) {	// event: directory created
+                      printf("%s \n", event->name); //no pilla bien el nombre??
 		      printf( "---%s: New directory %s created.\n", argv[0], event->name );
 		      sprintf(buf,"%s%s\r\n",KOMANDOAK[COM_MKDR], event->name);
 		      write(sock,buf,strlen(buf));		// Enviar petición.
 		      n = readline(sock, buf, MAX_BUF);		// Recibir respuesta.
-		      status = parse(buf);
+		      /*status = parse(buf);
 		      if(status != 0)
 		      {
 			   fprintf(stderr,"Error: ");
 			   fprintf(stderr,"%s",ER_MEZUAK[status]);
-		      }
+		      }*/
 		      break;  // Oier: no se porque sin este break se mete en un bucle sin fin, 
 		      	 //lo he puesto para hacer una prueba y se ha arreglado solo. Asi que no lo quiteis.
 		    }
 		    else {	// event: file created
 		      printf( "---%s: New file %s created.\n", argv[0], event->name );
 		      strcpy(param, event->name);
-		      if(stat(param, &file_info) < 0)	// Conseguir el tamaño del fichero.
+                      printf("%s \n", param);
+		      if(stat(param, &file_info) < 0)	// Conseguir el tamaño del fichero. Aquí hay un error, no consigue el tamaño...
 		      {
-			   fprintf(stderr,"%s fitxategia ez da aurkitu.\n", param);
+			   fprintf(stderr,"%s fitxategia ez da aurkitu.\n", param); 
 		      }
 		      else
 	              {
@@ -413,14 +415,30 @@ int main(int argc, char *argv[])
 		  else if ( event->mask & IN_DELETE ) {
 		    if ( event->mask & IN_ISDIR ) {	// event: directory removed
 		      if (!strcmp(event->name, "inotify.example.executing")) {
-		        rmdir("example.inotify.executing");
+                        rmdir("example.inotify.executing");
 		        exiting=1;
 	//              break;
 		      }
 		      printf( "---%s: Directory %s deleted.\n", argv[0], event->name );
 		    }
-		    else {	// event: fie removed
-		      printf( "---%s: File %s deleted.\n", argv[0], event->name );
+		    else {	// event: file removed
+                        printf( "---%s: File %s deleted.\n", argv[0], event->name );
+                        fgets(param,MAX_BUF,stdin);
+                        param[strlen(param)-1] = 0;
+			sprintf(buf,"%s%s\r\n",KOMANDOAK[COM_DELE], param);
+			write(sock,buf,strlen(buf));				// Eskaera bidali.
+			n = readline(sock, buf, MAX_BUF);		// Erantzuna jaso.
+			status = parse(buf);
+			if(status != 0)
+                        {
+				fprintf(stderr,"Errorea: ");
+				fprintf(stderr,"%s",ER_MEZUAK[status]);
+			}
+			else
+			{
+				printf("%s fitxategia ezabatua izan da.\n", param);
+			}
+			break;
 		    }
 		  }
 		}
