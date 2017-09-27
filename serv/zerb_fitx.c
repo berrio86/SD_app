@@ -298,6 +298,8 @@ void sesioa(int s)
 				error=mkdir(dir_path, ACCESSPERMS);  // Crear el nuevo directorio.
 				if(error < 0)
 					write(s, "ER11\r\n",6);
+				else 
+					write(s, "OK\r\n",4);
 				break;
 			case COM_DELE:
 				if(egoera != ST_MAIN)		// Egiaztatu esperotako egoeran jaso dela komandoa.

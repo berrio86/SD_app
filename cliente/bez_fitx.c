@@ -360,6 +360,8 @@ int main(int argc, char *argv[])
 			   fprintf(stderr,"Error: ");
 			   fprintf(stderr,"%s",ER_MEZUAK[status]);
 		      }
+		      break;  // Oier: no se porque sin este break se mete en un bucle sin fin, 
+		      	 //lo he puesto para hacer una prueba y se ha arreglado solo. Asi que no lo quiteis.
 		    }
 		    else {	// event: file created
 		      printf( "---%s: New file %s created.\n", argv[0], event->name );
@@ -385,7 +387,7 @@ int main(int argc, char *argv[])
 				  {
 					fprintf(stderr,"El fichero %s no se puede abrir.\n",param);
 					exit(1);
-			          }
+			        }
 					sprintf(buf,"%s\r\n",KOMANDOAK[COM_UPL2]);
 					write(sock,buf,strlen(buf));	// Confirmar el envío.
 					while((n=fread(buf,1,MAX_BUF,fp))==MAX_BUF)	// Enviar el fichero con el tamaño máximo de bloque.
