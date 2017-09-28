@@ -203,12 +203,14 @@ int main(int argc, char *argv[]) {
                         printf("---%s: New file %s created.\n", argv[0], event->name);
                         
                         //codigo añadido por nosotros
-                        strcpy(param, event->name);
+                        //strcpy(param, event->name);
+                        sprintf(param, "%s%s", directorio, event->name );
+                        printf("%s\n",param);
                         if (stat(param, &file_info) < 0) // Conseguir tamaño de fichero
                         {
                             fprintf(stderr, "No se ha encontrado el fichero: %s .\n", param);
                         } else {
-                            sprintf(buf, "%s%s?%ld\r\n", KOMANDOAK[COM_UPLO], param, file_info.st_size);
+                            sprintf(buf, "%s%s?%ld\r\n", KOMANDOAK[COM_UPLO], event->name, file_info.st_size);
                             write(sock, buf, strlen(buf)); // Mandar petición
                             n = readline(sock, buf, MAX_BUF); // Obtener respuesta
                             status = parse(buf);
@@ -229,9 +231,9 @@ int main(int argc, char *argv[]) {
                                     fprintf(stderr, "Error al mandar el fichero.\n");
                                     exit(1);
                                 }
-                                write(sock, buf, n); // Fitxategiaren azkeneko blokea bidali.
+                                write(sock, buf, n); // Mandar ultimo bloque del fichero
 
-                                n = readline(sock, buf, MAX_BUF); // Erantzuna jaso.
+                                n = readline(sock, buf, MAX_BUF); // Recibir respuesta
                                 status = parse(buf);
                                 if (status != 0) {
                                     fprintf(stderr, "Error: ");
@@ -281,7 +283,7 @@ int main(int argc, char *argv[]) {
                             fprintf(stderr, "Error: ");
                             fprintf(stderr, "%s", ER_MEZUAK[status]);
                         } else {
-                            printf("El fihcero %s ha sido borrado con éxito.\n", param);
+                            printf("El fichero %s ha sido borrado con éxito.\n", param);
                         }
                         //codigo añadido por nosotros
                     }

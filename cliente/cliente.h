@@ -1,6 +1,6 @@
 #define MAX_BUF 1024
 #define SERVER "localhost"
-#define FILES_PATH "./"
+#define FILES_PATH "./files/"
 #define PORT 6012
 
 #define COM_USER	0
