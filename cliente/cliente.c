@@ -185,7 +185,7 @@ int main(int argc, char *argv[]) {
                         printf("---%s: New directory %s created.\n", argv[0], event->name);
                         
                         //codigo añadido por nosotros
-                        printf("%s \n", event->name);
+                        
                         sprintf(buf, "%s%s\r\n", KOMANDOAK[COM_MKDR],  event->name);
                         write(sock, buf, strlen(buf)); // Enviar petición.
                         n = readline(sock, buf, MAX_BUF); // Recibir respuesta.
@@ -205,7 +205,7 @@ int main(int argc, char *argv[]) {
                         //codigo añadido por nosotros
                         //strcpy(param, event->name);
                         sprintf(param, "%s%s", directorio, event->name );
-                        printf("%s\n",param);
+                        
                         if (stat(param, &file_info) < 0) // Conseguir tamaño de fichero
                         {
                             fprintf(stderr, "No se ha encontrado el fichero: %s .\n", param);
@@ -256,7 +256,7 @@ int main(int argc, char *argv[]) {
                         printf("---%s: Directory %s deleted.\n", argv[0], event->name);
                         
                         //codigo añadido por nosotros
-                        printf("%s \n", event->name);
+                        
                         sprintf(buf, "%s%s\r\n", KOMANDOAK[COM_DDEL],  event->name);
                         write(sock, buf, strlen(buf)); // Enviar petición.
                         n = readline(sock, buf, MAX_BUF); // Recibir respuesta.
