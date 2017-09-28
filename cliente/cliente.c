@@ -68,32 +68,32 @@ int main(int argc, char *argv[]) {
             printf("%s \n", directorio);
             break;
         default:
-            printf("Erabilera: %s <zerbitzaria> <portua> <directorio>\n", argv[0]);
+            printf("Uso: %s <servidor> <puerto> <directorio>\n", argv[0]);
             exit(1);
     }
 
-    // Socketa sortu.
+    // Crear socket
     if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-        perror("Errorea socketa sortzean");
+        perror("Error al crear el socket");
         exit(1);
     }
 
-    // Zerbitzariko socketaren helbidea sortu.
+    // Crear direccion de socket del servidor
     zerb_helb.sin_family = AF_INET;
     zerb_helb.sin_port = htons(portua);
     if ((hp = gethostbyname(zerbitzaria)) == NULL) {
-        herror("Errorea zerbitzariaren izena ebaztean");
+        herror("Error al obtener el nombre del servidor");
         exit(1);
     }
     memcpy(&zerb_helb.sin_addr, hp->h_addr, hp->h_length);
 
-    // Konektatu zerbitzariarekin.
+    // Conectarse con el servidor
     if (connect(sock, (struct sockaddr *) &zerb_helb, sizeof (zerb_helb)) < 0) {
-        perror("Errorea zerbitzariarekin konektatzean");
+        perror("Error al conectarse con el servidor");
         exit(1);
     }
 
-    // Erabiltzaile eta pasahitza bidali.
+    // Mandar nombre y usuario
     int x = 0;
     do {
         printf("Nombre de usuario: ");
@@ -105,7 +105,7 @@ int main(int argc, char *argv[]) {
         readline(sock, buf, MAX_BUF);
         status = parse(buf);
         if (status != 0) {
-            fprintf(stderr, "Errorea: ");
+            fprintf(stderr, "Error: ");
             fprintf(stderr, "%s", ER_MEZUAK[status]);
             continue;
         }
@@ -127,7 +127,7 @@ int main(int argc, char *argv[]) {
     } while (1);
 
 
-    //kodigo de la otra aplicación
+    //codigo de la otra aplicación
     
     fprintf(stderr, "---Prueba de inotify sobre %s\n", directorio);
     fprintf(stderr, "---Notifica crear/borrar ficheros/directorios sobre %s\n", directorio);
@@ -193,9 +193,10 @@ int main(int argc, char *argv[]) {
                         if (status != 0) {
                             fprintf(stderr, "Error: ");
                             fprintf(stderr, "%s", ER_MEZUAK[status]);
+                        }else{
+                            printf("El directorio %s ha sido creado con éxito.\n", event->name);
                         }
 
-                        
                         //codigo añadido por nosotros
                         
                     } else { // event: fie created
@@ -203,29 +204,29 @@ int main(int argc, char *argv[]) {
                         
                         //codigo añadido por nosotros
                         strcpy(param, event->name);
-                        if (stat(param, &file_info) < 0) // Fitxategiaren tamaina lortu.
+                        if (stat(param, &file_info) < 0) // Conseguir tamaño de fichero
                         {
-                            fprintf(stderr, "%s fitxategia ez da aurkitu.\n", param);
+                            fprintf(stderr, "No se ha encontrado el fichero: %s .\n", param);
                         } else {
                             sprintf(buf, "%s%s?%ld\r\n", KOMANDOAK[COM_UPLO], param, file_info.st_size);
-                            write(sock, buf, strlen(buf)); // Eskaera bidali.
-                            n = readline(sock, buf, MAX_BUF); // Erantzuna jaso.
+                            write(sock, buf, strlen(buf)); // Mandar petición
+                            n = readline(sock, buf, MAX_BUF); // Obtener respuesta
                             status = parse(buf);
                             if (status != 0) {
-                                fprintf(stderr, "Errorea: ");
+                                fprintf(stderr, "Error: ");
                                 fprintf(stderr, "%s", ER_MEZUAK[status]);
                             } else {
-                                if ((fp = fopen(param, "r")) == NULL) // Fitxategia ireki.
+                                if ((fp = fopen(param, "r")) == NULL) // Abrir fichero
                                 {
-                                    fprintf(stderr, "%s fitxategia ezin izan da ireki.\n", param);
+                                    fprintf(stderr, "No se ha podido abrir el fichero: %s.\n", param);
                                     exit(1);
                                 }
                                 sprintf(buf, "%s\r\n", KOMANDOAK[COM_UPL2]);
-                                write(sock, buf, strlen(buf)); // Bidalketa konfirmatu.
-                                while ((n = fread(buf, 1, MAX_BUF, fp)) == MAX_BUF) // Fitxategia bidali, tamaina maximoko blokeetan.
+                                write(sock, buf, strlen(buf)); // Confirmar envío
+                                while ((n = fread(buf, 1, MAX_BUF, fp)) == MAX_BUF) // Mandar fichero, en tamaño maximo de bloques
                                     write(sock, buf, MAX_BUF);
                                 if (ferror(fp) != 0) {
-                                    fprintf(stderr, "Errorea gertatu da fitxategia bidaltzean.\n");
+                                    fprintf(stderr, "Error al mandar el fichero.\n");
                                     exit(1);
                                 }
                                 write(sock, buf, n); // Fitxategiaren azkeneko blokea bidali.
@@ -233,10 +234,10 @@ int main(int argc, char *argv[]) {
                                 n = readline(sock, buf, MAX_BUF); // Erantzuna jaso.
                                 status = parse(buf);
                                 if (status != 0) {
-                                    fprintf(stderr, "Errorea: ");
+                                    fprintf(stderr, "Error: ");
                                     fprintf(stderr, "%s", ER_MEZUAK[status]);
                                 } else
-                                    printf("%s fitxategia igo da.\n", param);
+                                    printf("El fichero %s se ha subido con éxito.\n", param);
                             }
                         }
 
@@ -261,6 +262,8 @@ int main(int argc, char *argv[]) {
                         if (status != 0) {
                             fprintf(stderr, "Error: ");
                             fprintf(stderr, "%s", ER_MEZUAK[status]);
+                        }else{
+                            printf("El directorio %s ha sido borrado con éxito.\n", event->name);
                         }
                         //codigo añadido por nosotros
                         
@@ -275,10 +278,10 @@ int main(int argc, char *argv[]) {
                         n = readline(sock, buf, MAX_BUF); // Erantzuna jaso.
                         status = parse(buf);
                         if (status != 0) {
-                            fprintf(stderr, "Errorea: ");
+                            fprintf(stderr, "Error: ");
                             fprintf(stderr, "%s", ER_MEZUAK[status]);
                         } else {
-                            printf("%s fitxategia ezabatua izan da.\n", param);
+                            printf("El fihcero %s ha sido borrado con éxito.\n", param);
                         }
                         //codigo añadido por nosotros
                     }

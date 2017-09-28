@@ -20,10 +20,10 @@ int main()
 	struct sockaddr_in zerb_helb;
 	socklen_t helb_tam;
 	
-	// Sortu socketa.
+	// Crear socket
 	if((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
 	{
-		perror("Errorea socketa sortzean");
+		perror("Error al crear el socket");
 		exit(1);
 	}
 	
@@ -32,34 +32,35 @@ int main()
 	zerb_helb.sin_addr.s_addr = htonl(INADDR_ANY);
 	zerb_helb.sin_port = htons(PORT);
 
-	// Esleitu helbidea socketari.	
+	// Asignar dirección al socket	
 	if(bind(sock, (struct sockaddr *) &zerb_helb, sizeof(zerb_helb)) < 0)
 	{
-		perror("Errorea socketari helbide bat esleitzean");
+		perror("Error al asignar una direccion al socket");
 		exit(1);
 	}
 	
-	// Ezarri socketa entzute socket gisa.
+	// Establecer socket de escucha
 	if(listen(sock,5) < 0)
 	{
-		perror("Errorea socketa entzute socket bezala ezartzean");
+		perror("Error al establecer socket como socket de escucha");
 		exit(1);
 	}
 
-	// Adierzi SIG_CHLD seinalea jasotzean ez dela ezer egingo. Modu honetan amaitutako prozesu umeak ez dira zonbi egoeran geratuko.
+        // No se hara nada al recibir SIG_CHLD. De esta forma los prozesos hijo terminados, no se quedarán tipo zombie
 	signal(SIGCHLD, SIG_IGN);
 
 	while(1)
 	{
 	
 		// Onartu konexio eskaera eta sortu elkarrizketa socketa.
+                // Aceptar petición de conexión y crear socket
 		if((elkarrizketa = accept(sock, NULL, NULL)) < 0)
 		{
-			perror("Errorea konexioa onartzean");
+			perror("Error al conectarse");
 			exit(1);
 		}
 
-		// Sortu prozesu ume bat bezeroarekin komunikatzeko.
+		// Crear procesos hijo para conectar con cliente
 		switch(fork())
 		{
 			case 0:

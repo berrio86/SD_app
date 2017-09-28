@@ -27,20 +27,19 @@
 char * KOMANDOAK[] = {"USER","PASS","LIST","DOWN","DOW2","UPLO","UPL2","DELE","MKDR", "DDEL","EXIT",NULL};
 char * ER_MEZUAK[] =
 {
-	"Dena ondo. Errorerik ez.\n",
-	"Komando ezezaguna edo ustegabekoa.\n",
-	"Erabiltzaile ezezaguna.\n",
-	"Pasahitz okerra.\n",
-	"Arazoa fitxategi zerrenda sortzen.\n",
-	"Fitxategia ez da existizen.\n",
-	"Arazoa fitxategia jeistean.\n",
-	"Erabiltzaile anonimoak ez dauka honetarako baimenik.\n",
-	"Fitxategiaren tamaina haundiegia da.\n",
-	"Arazoa fitxategia igotzeko prestatzean.\n",
-	"Arazoa fitxategia igotzean.\n",
-	"Arazoa fitxategia ezabatzean.\n"
+	"Todo bien. Sin errores.\n",
+	"Comando desconocido o inesperado.\n",
+	"Usuario desconocido.\n",
+	"Password incorrecto.\n",
+	"Problemas al crear la lista de ficheros.\n",
+	"El fichero no existe.\n",
+	"Error al descargar el fichero.\n",
+	"El usuario anonimo no tiene permisos para esa acción.\n",
+	"El tamaño del fichero es demasiado grande.\n",
+	"Error en el preparativo de subida del fichero.\n",
+	"Error al subir el fichero.\n",
+	"Error al borrar el fichero.\n"
 };
 
 int parse(char *status);
 int readline(int stream, char *buf, int tam);
-//int menua();
