@@ -1,5 +1,6 @@
 #define MAX_BUF 1024
 #define SERVER "localhost"
+#define FILES_PATH "files/"
 #define PORT 6012
 
 #define COM_USER	0
@@ -37,12 +38,11 @@ char * ER_MEZUAK[] =
 	"4 Arazoa fitxategi zerrenda sortzen.\n",
 	"5 Fitxategia ez da existizen.\n",
 	"6 Arazoa fitxategia jeistean.\n",
-	"7 Erabiltzaile anonimoak ez dauka honetarako baimenik.\n",
-	"8 Fitxategiaren tamaina haundiegia da.\n",
-	"9 Arazoa fitxategia igotzeko prestatzean.\n",
-	"10 Arazoa fitxategia igotzean.\n",
-	"11 Arazoa fitxategia ezabatzean.\n",
-	"12 Error al crear directorio nuevo.\n"
+	"7 Fitxategiaren tamaina haundiegia da.\n",
+	"8 Arazoa fitxategia igotzeko prestatzean.\n",
+	"9 Arazoa fitxategia igotzean.\n",
+	"10 Arazoa fitxategia ezabatzean.\n",
+	"11 Error al crear directorio nuevo.\n"
 };
 
 int parse(char *status);

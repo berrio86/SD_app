@@ -52,6 +52,7 @@ int main(int argc, char *argv[])
 			printf("%s \n", directorio);
 		case 1:
 			strcpy(zerbitzaria, SERVER);
+			strcpy(directorio, FILES_PATH);
 			break;
 		default:
 			printf("Erabilera: %s <zerbitzaria> <portua> <directorio>\n", argv[0]);
@@ -353,7 +354,7 @@ int main(int argc, char *argv[])
 		    if ( event->mask & IN_ISDIR ) {	// event: directory created
                       printf("%s \n", event->name); 
 		      printf( "---%s: New directory %s created.\n", argv[0], event->name );
-		      sprintf(buf,"%s%s\r\n",KOMANDOAK[COM_MKDR], event->name);
+		      sprintf(buf,"%s%s%s\r\n",KOMANDOAK[COM_MKDR], directorio, event->name);
 		      write(sock,buf,strlen(buf));		// Enviar petición.
 		      n = readline(sock, buf, MAX_BUF);		// Recibir respuesta.
 		      status = parse(buf);
@@ -367,13 +368,11 @@ int main(int argc, char *argv[])
 		    }
 		    else {	// event: file created
 		      printf( "---%s: New file %s created.\n", argv[0], event->name );
-		      strcpy(param, event->name);
+		      sprintf(param, "%s%s", directorio, event->name);
                       printf("%s \n", param);
-                      strcat(directorio, event->name);
-                      printf("%s \n", directorio);
 		      if(stat(directorio, &file_info) < 0)	// Conseguir el tamaño del fichero. Aquí hay un error, no consigue el tamaño...
 		      {
-			   fprintf(stderr,"%s fitxategia ez da aurkitu.\n", param); 
+			   fprintf(stderr,"No se ha encontrado el fichero %s.\n", param); 
 		      }
 		      else
 	              {

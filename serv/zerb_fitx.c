@@ -214,13 +214,6 @@ void sesioa(int s)
 					ustegabekoa(s);
 					continue;
 				}
-				// Erabiltzaile anonimoak ez dauka ekintza honetarako baimenik.
-				if(erabiltzaile==0)
-				{
-					write(s,"ER7\r\n",5);
-					continue;
-				}
-				
 				buf[n-2] = 0;	// EOL kendu.
 				// Mezuak dauzkan bi zatiak (fitxategi izena eta tamaina) erauzi.
 				if((sep = strchr(buf,'?')) == NULL)
@@ -235,12 +228,12 @@ void sesioa(int s)
 				sprintf(file_path,"%s/%s",FILES_PATH,file_name);	// Fitxategiak dauden karpeta eta fitxategiaren izena kateatu.
 				if(file_size > MAX_UPLOAD_SIZE)	// Fitxategi tamainak maximoa gainditzen ez duela egiaztatu.
 				{
-					write(s,"ER8\r\n",5);
+					write(s,"ER7\r\n",5);
 					continue;
 				}
 				if(toki_librea() < file_size + SPACE_MARGIN)	// Mantendu beti toki libre minimo bat diskoan.
 				{
-					write(s,"ER9\r\n",5);
+					write(s,"ER8\r\n",5);
 					continue;
 				}
 				write(s,"OK\r\n",4);
@@ -284,7 +277,7 @@ void sesioa(int s)
 					write(s,"OK\r\n",4);
 				}
 				else
-					write(s,"ER10\r\n",6);
+					write(s,"ER9\r\n",6);
 				break;
 			case COM_MKDR:
 				if(egoera != ST_MAIN)
@@ -307,16 +300,10 @@ void sesioa(int s)
 					ustegabekoa(s);
 					continue;
 				}
-				// Erabiltzaile anonimoak ez dauka ekintza honetarako baimenik.
-				if(erabiltzaile==0)
-				{
-					write(s,"ER7\r\n",5);
-					continue;
-				}
 				buf[n-2] = 0; // EOL ezabatu.
 				sprintf(file_path,"%s/%s",FILES_PATH,buf+4);	// Fitxategiak dauden karpeta eta fitxategiaren izena kateatu.
 				if(unlink(file_path) < 0)		// Ezabatu fitxategia.
-					write(s,"ER11\r\n",6);
+					write(s,"ER10\r\n",6);
 				else
 					write(s,"OK\r\n",4);
 				break;
