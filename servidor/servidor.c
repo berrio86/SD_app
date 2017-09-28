@@ -12,7 +12,7 @@
 #include <dirent.h>
 #include <sys/statvfs.h>
 
-#include "zerb_fitx.h"
+#include "servidor.h"
 
 int main()
 {
@@ -279,7 +279,22 @@ void sesioa(int s)
 				else
 					write(s,"ER9\r\n",6);
 				break;
-			case COM_MKDR:
+			
+			case COM_DELE:
+				if(egoera != ST_MAIN)		// Egiaztatu esperotako egoeran jaso dela komandoa.
+				{
+					ustegabekoa(s);
+					continue;
+				}
+				buf[n-2] = 0; // EOL ezabatu.
+				sprintf(file_path,"%s/%s",FILES_PATH,buf+4);	// Fitxategiak dauden karpeta eta fitxategiaren izena kateatu.
+				if(unlink(file_path) < 0)		// Ezabatu fitxategia.
+					write(s,"ER10\r\n",6);
+				else
+					write(s,"OK\r\n",4);
+				break;
+                        
+                        case COM_MKDR:
 				if(egoera != ST_MAIN)
 				{
 					ustegabekoa(s);
@@ -294,21 +309,23 @@ void sesioa(int s)
 				else 
 					write(s, "OK\r\n",4);
 				break;
-			case COM_DELE:
-				if(egoera != ST_MAIN)		// Egiaztatu esperotako egoeran jaso dela komandoa.
+                                
+			case COM_DDEL:
+				if(egoera != ST_MAIN)
 				{
 					ustegabekoa(s);
 					continue;
 				}
 				buf[n-2] = 0; // EOL ezabatu.
-				sprintf(file_path,"%s/%s",FILES_PATH,buf+4);	// Fitxategiak dauden karpeta eta fitxategiaren izena kateatu.
-				if(unlink(file_path) < 0)		// Ezabatu fitxategia.
-					write(s,"ER10\r\n",6);
-				else
-					write(s,"OK\r\n",4);
-				break;
-			//case COM_DDEL:
-				
+				strcpy(dir_name,buf+4);	// Obtener el nombre del directorio.
+				sprintf(dir_path,"%s/%s",FILES_PATH, dir_name);	// Conseguir el PATH del nuevo directorio.
+				error=rmdir(dir_path);  // barr el directorio.
+				if(error < 0)
+					write(s, "ER11\r\n",6);
+				else 
+					write(s, "OK\r\n",4);
+                                break;
+                                
 			case COM_EXIT:
 				if(n > 6)	// Egiaztatu ez dela parametrorik jaso.
 				{
