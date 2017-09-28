@@ -30,19 +30,19 @@
 char * KOMANDOAK[] = {"USER","PASS","LIST","DOWN","DOW2","UPLO","UPL2","DELE", "MKDR", "DDEL", "EXIT",NULL};
 char * ER_MEZUAK[] =
 {
-	"Dena ondo. Errorerik ez.\n",
-	"Komando ezezaguna edo ustegabekoa.\n",
-	"Erabiltzaile ezezaguna.\n",
-	"Pasahitz okerra.\n",
-	"Arazoa fitxategi zerrenda sortzen.\n",
-	"Fitxategia ez da existizen.\n",
-	"Arazoa fitxategia jeistean.\n",
-	"Erabiltzaile anonimoak ez dauka honetarako baimenik.\n",
-	"Fitxategiaren tamaina haundiegia da.\n",
-	"Arazoa fitxategia igotzeko prestatzean.\n",
-	"Arazoa fitxategia igotzean.\n",
-	"Arazoa fitxategia ezabatzean.\n",
-	"Error al crear directorio nuevo.\n"
+	"0 Dena ondo. Errorerik ez.\n",
+	"1 Komando ezezaguna edo ustegabekoa.\n",
+	"2 Erabiltzaile ezezaguna.\n",
+	"3 Pasahitz okerra.\n",
+	"4 Arazoa fitxategi zerrenda sortzen.\n",
+	"5 Fitxategia ez da existizen.\n",
+	"6 Arazoa fitxategia jeistean.\n",
+	"7 Erabiltzaile anonimoak ez dauka honetarako baimenik.\n",
+	"8 Fitxategiaren tamaina haundiegia da.\n",
+	"9 Arazoa fitxategia igotzeko prestatzean.\n",
+	"10 Arazoa fitxategia igotzean.\n",
+	"11 Arazoa fitxategia ezabatzean.\n",
+	"12 Error al crear directorio nuevo.\n"
 };
 
 int parse(char *status);

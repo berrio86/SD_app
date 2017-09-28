@@ -48,6 +48,7 @@ int main(int argc, char *argv[])
 			break;
 		case 2:
 			strcpy(directorio, argv[1]);
+                        strcat(directorio, "/");
 			printf("%s \n", directorio);
 		case 1:
 			strcpy(zerbitzaria, SERVER);
@@ -72,7 +73,7 @@ int main(int argc, char *argv[])
 	if ( fd < 0 ) {
 	  perror( "inotify_init" );
 	}
-
+        
 	/* Notificaremos los cambios en el directorio ./My_inotify */
 	wd_cd = inotify_add_watch( fd, directorio, IN_CREATE | IN_DELETE );
 
@@ -350,17 +351,17 @@ int main(int argc, char *argv[])
 	//      memcpy(event+EVENT_SIZE, buffer+EVENT_SIZE, length);
 		  if ( event->mask & IN_CREATE ) {
 		    if ( event->mask & IN_ISDIR ) {	// event: directory created
-                      printf("%s \n", event->name); //no pilla bien el nombre??
+                      printf("%s \n", event->name); 
 		      printf( "---%s: New directory %s created.\n", argv[0], event->name );
 		      sprintf(buf,"%s%s\r\n",KOMANDOAK[COM_MKDR], event->name);
 		      write(sock,buf,strlen(buf));		// Enviar petición.
 		      n = readline(sock, buf, MAX_BUF);		// Recibir respuesta.
-		      /*status = parse(buf);
+		      status = parse(buf);
 		      if(status != 0)
 		      {
 			   fprintf(stderr,"Error: ");
 			   fprintf(stderr,"%s",ER_MEZUAK[status]);
-		      }*/
+		      }
 		      break;  // Oier: no se porque sin este break se mete en un bucle sin fin, 
 		      	 //lo he puesto para hacer una prueba y se ha arreglado solo. Asi que no lo quiteis.
 		    }
@@ -368,7 +369,9 @@ int main(int argc, char *argv[])
 		      printf( "---%s: New file %s created.\n", argv[0], event->name );
 		      strcpy(param, event->name);
                       printf("%s \n", param);
-		      if(stat(param, &file_info) < 0)	// Conseguir el tamaño del fichero. Aquí hay un error, no consigue el tamaño...
+                      strcat(directorio, event->name);
+                      printf("%s \n", directorio);
+		      if(stat(directorio, &file_info) < 0)	// Conseguir el tamaño del fichero. Aquí hay un error, no consigue el tamaño...
 		      {
 			   fprintf(stderr,"%s fitxategia ez da aurkitu.\n", param); 
 		      }
@@ -409,7 +412,9 @@ int main(int argc, char *argv[])
 							fprintf(stderr,"%s",ER_MEZUAK[status]);
 						}
 			    }
+                            
 		       }
+                       break;
 		    }
 		  }
 		  else if ( event->mask & IN_DELETE ) {
@@ -417,9 +422,10 @@ int main(int argc, char *argv[])
 		      if (!strcmp(event->name, "inotify.example.executing")) {
                         rmdir("example.inotify.executing");
 		        exiting=1;
-	//              break;
+                        break;
 		      }
 		      printf( "---%s: Directory %s deleted.\n", argv[0], event->name );
+                      //break; 
 		    }
 		    else {	// event: file removed
                         printf( "---%s: File %s deleted.\n", argv[0], event->name );
