@@ -14,11 +14,33 @@
 
 #include "servidor.h"
 
-int main()
+
+struct mensaje{
+    int cont;
+    char valor[];
+};
+
+
+int main(int argc, char *argv[])
 {
-	int sock, elkarrizketa;
-	struct sockaddr_in zerb_helb;
-	socklen_t helb_tam;
+		int sock, elkarrizketa;
+		struct sockaddr_in zerb_helb, primario_dir;
+		socklen_t helb_tam;
+    	int primario=0;
+        struct sockaddr_in orden_de_secundarios[3];
+        
+        
+        if(argc == 3){
+            primario = 1;
+            
+        }
+        
+        if(argc == 5){
+            memset(&primario_dir, 0, sizeof(primario_dir));
+            primario_dir.sin_family = AF_INET;
+            primario_dir.sin_addr.s_addr = htonl(atoi(argv[1]));
+            primario_dir.sin_port = htons(atoi(argv[2]));
+        }
 	
 	// Crear socket
 	if((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
