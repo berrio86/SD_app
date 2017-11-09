@@ -1,5 +1,6 @@
 #define MAX_BUF 1024
 #define PORT 6012
+#define PORT_SERVIDORES 6013
 #define FILES_PATH	"files"
 
 #define ST_INIT	0
@@ -37,3 +38,9 @@ int bidali_zerrenda(int s);
 unsigned long toki_librea();
 void sig_chld(int signal);
 int ez_ezkutua(const struct dirent *entry);
+void enviar(struct sockaddr_in, struct mensaje);
+void r_difundir(int [], struct mensaje);
+void recibir(struct mensaje);
+void r_entregar(struct mensaje);
+int chequear_mensaje(struct mensaje);
+void establecerSocketClientes(int, int);
