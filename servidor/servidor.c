@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -13,11 +12,9 @@
 #include <sys/statvfs.h>
 
 #include "servidor.h"
+#include <pthread.h>
 
-struct mensaje {
-    int cont;
-    char valor[];
-};
+
 
 int main(int argc, char *argv[]) {
     int sock_clientes, elkarrizketa, sock_servidores, sock_comunicacion;
@@ -109,7 +106,15 @@ int main(int argc, char *argv[]) {
         signal(SIGCHLD, SIG_IGN);
         
         //meter esto en un thread más adelante
-        establecerSocketServidores(sock_servidores, sock_comunicacion);
+		pthread_t t;
+		int param [2];
+		param[0] = sock_servidores;
+		param[1] = sock_comunicacion;
+		if(pthread_create(&t, NULL, establecerSocketServidores, param)){
+			perror("Error al crear thread de clientes");
+			exit(1);
+		}
+        //establecerSocketServidores(sock_servidores, sock_comunicacion);
 
     } else {
         /*ESTO ES PARTE DE LA COMUNICACION CON LOS SERVIDORES*/
@@ -513,7 +518,7 @@ void establecerSocketClientes(int sock_clientes, int elkarrizketa) {
     }
 }
 
-void establecerSocketServidores(int sock_servidores, int sock_comunicacion) {
+void *establecerSocketServidores(int sock_servidores, int sock_comunicacion) {
     //Esto se debería meter en un thread
     while (1) {
         // Onartu konexio eskaera eta sortu elkarrizketa socketa.
@@ -537,13 +542,14 @@ void establecerSocketServidores(int sock_servidores, int sock_comunicacion) {
     }
 }
 
+/*
 void enviar(struct sockaddr_in servidor, struct mensaje msg) {
+    //implementar función write() para enviar mensajes al resto de servidores.
     printf("Se está enviando mensaje a la ip: %s\n", servidor.sin_addr);
     printf("El mensaje enviado es: %s\n", msg.valor);
-    //establecer ordenes de sockets para enviar
 }
 
-void r_difundir(int servidores[], struct mensaje msg) {
+void difundir(int servidores[], struct mensaje msg) {
     printf("Se está difundiendo mensaje.\n");
     int i = 0;
     while (i<sizeof (servidores)) {
@@ -552,22 +558,26 @@ void r_difundir(int servidores[], struct mensaje msg) {
     }
 }
 
-void recibir(struct mensaje msg) {
-    printf("Se ha recibido un mensaje\n");
-    if (chequear_mensaje(msg) == 1) {
-        r_difundir(servidores, msg); // como conseguir la variable servidores????
-    }
-    r_entregar();
+void recibir() {
+	mkfifo("FIFOrecibir");
+	int fd=open("FIFOrecibir");
+	while(1){
+		//implementar readline() para recibir mensajes
+		int a=read();
+		printf("Se ha recibido un mensaje\n");
+		write( fd, &a, 1);
+		//llamar a r_entregar mediante cola fifo
+	}
 }
 
 void r_entregar(struct mensaje msg) {
+    //entregar mensaje a la aplicación
     printf("Se está entregando mensaje %s\n", msg.valor);
-
 }
 
-int chequear_mensaje(struct mensaje msg) {
+int chequearMensaje(struct mensaje msg) {
     //Si el mensaje se ha recibido anteriormente
-    if () { //como mirar el buffer??
+    if (/* mirar el buffer de mensajes) { 
         return 0;
     } else {
         return 1;

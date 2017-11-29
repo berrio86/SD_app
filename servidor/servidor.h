@@ -29,6 +29,11 @@ char * erab_zer[] = {"sd",NULL};
 char * pass_zer[] = {"sd"};
 int egoera;
 
+struct mensaje {
+    int cont;
+    char valor[];
+};
+
 void sesioa(int s);
 int readline(int stream, char *buf, int tam);
 int bilatu_string(char *string, char **string_zerr);
@@ -43,4 +48,8 @@ void r_difundir(int [], struct mensaje);
 void recibir(struct mensaje);
 void r_entregar(struct mensaje);
 int chequear_mensaje(struct mensaje);
-void establecerSocketClientes(int, int);
+void establecerSocketClientes (int, int);
+
+/*GUK GEHITUTAKO KODEA*/
+void *establecerSocketServidores(int , int);
+
