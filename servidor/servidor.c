@@ -10,18 +10,21 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <sys/statvfs.h>
-
-#include "servidor.h"
 #include <pthread.h>
 
+#include "servidor.h"
 
+
+int sock_clientes, elkarrizketa, sock_servidores, sock_comunicacion, sock_secundario;
+struct sockaddr_in servidor_dir, primario_dir, clientes_dir;
+socklen_t helb_tam;
+int primario;
+struct sockaddr_in servidores[3];
+pthread_t tserv, tcli;
 
 int main(int argc, char *argv[]) {
-    int sock_clientes, elkarrizketa, sock_servidores, sock_comunicacion;
-    struct sockaddr_in servidor_dir, primario_dir, clientes_dir;
-    socklen_t helb_tam;
-    int primario = 0;
-    struct sockaddr_in servidores[3];
+
+    primario = 0;
 
     if (argc == 1) {
         printf("Estableciendo servidor primario.\n");
@@ -86,14 +89,13 @@ int main(int argc, char *argv[]) {
             exit(1);
         }
 
-        // No se hara nada al recibir SIG_CHLD. De esta forma los prozesos hijo terminados, no se quedarán tipo zombie
-        signal(SIGCHLD, SIG_IGN);
+
+        if (pthread_create(&tcli, NULL, establecerSocketClientes, NULL)) {
+            perror("Error al crear thread de clientes");
+            exit(1);
+        }
 
 
-        //meter esto en un thread más adelante
-        establecerSocketClientes(sock_clientes, elkarrizketa);
-        
-        
         /*ESTO ES PARTE DE LA COMUNICACION CON LOS SERVIDORES*/
         /* SE ESTABLECE EL PUERTO 6013 COMO PUERTO DE ESCUCHA SOLO PARA SERVIDORES*/
         // Establecer socket de escucha para servidores
@@ -102,30 +104,128 @@ int main(int argc, char *argv[]) {
             exit(1);
         }
 
-        // No se hara nada al recibir SIG_CHLD. De esta forma los prozesos hijo terminados, no se quedarán tipo zombie
-        signal(SIGCHLD, SIG_IGN);
-        
-        //meter esto en un thread más adelante
-		pthread_t t;
-		int param [2];
-		param[0] = sock_servidores;
-		param[1] = sock_comunicacion;
-		if(pthread_create(&t, NULL, establecerSocketServidores, param)){
-			perror("Error al crear thread de clientes");
-			exit(1);
-		}
-        //establecerSocketServidores(sock_servidores, sock_comunicacion);
+        if (pthread_create(&tserv, NULL, establecerSocketServidores, NULL)) {
+            perror("Error al crear thread de clientes");
+            exit(1);
+        }
 
     } else {
-        /*ESTO ES PARTE DE LA COMUNICACION CON LOS SERVIDORES*/
-        /* SE ESTABLECE EL PUERTO 6013 COMO PUERTO DE COMUNICACIÓN ENTRE SERVIDORES*/
+        /*ESTO ES PARTE DE LA DE LOS SERVIDORES SECUNDARIOS*/
+        /**/
         
-        //aqui hay que mandar un mensaje al servidor primario y de respuesta recibirá la lista de direcciones de todos los servidores
-        //se mantiene abierta la comunicación entre primario y secundario.
-        //write(sock, buf, MAX_BUF);
+        if ((sock_secundario = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+            perror("Error al crear el socket de secundarios");
+            exit(1);
+        }
+
+        if (connect(sock_secundario, (struct sockaddr *) &primario_dir, sizeof (primario_dir)) < 0) {
+            perror("Error al conectarse con el servidor primario");
+            exit(1);
+        }else{
+            printf("El secundario se ha conectado al primario con exito\n");
+        }
+        
+
     }
 
 }
+
+/*IÑAKIK GEHITUTAKO KODEA*/
+
+
+void * establecerSocketClientes(void * a) {
+    printf("El thread de socket de clientes funciona\n");
+    // No se hara nada al recibir SIG_CHLD. De esta forma los prozesos hijo terminados, no se quedarán tipo zombie
+    signal(SIGCHLD, SIG_IGN);
+    while (1) {
+        // Onartu konexio eskaera eta sortu elkarrizketa socketa.
+        // Aceptar petición de conexión y crear socket
+        if ((elkarrizketa = accept(sock_clientes, NULL, NULL)) < 0) {
+            perror("Error al conectarse");
+            exit(1);
+        }
+
+        // Crear procesos hijo para conectar con cliente
+        switch (fork()) {
+            case 0:
+                close(sock_clientes);
+                sesioa(elkarrizketa);
+                close(elkarrizketa);
+                exit(0);
+            default:
+                close(elkarrizketa);
+        }
+    }
+}
+
+//void * establecerSocketServidores(int sock_servidores, int sock_comunicacion) {
+
+void * establecerSocketServidores(void * a) {
+    printf("El thread de socket de servidores funciona\n");
+    // No se hara nada al recibir SIG_CHLD. De esta forma los prozesos hijo terminados, no se quedarán tipo zombie
+    signal(SIGCHLD, SIG_IGN);
+    while (1) {
+        // Onartu konexio eskaera eta sortu elkarrizketa socketa.
+        // Aceptar petición de conexión y crear socket
+        if ((sock_comunicacion = accept(sock_servidores, NULL, NULL)) < 0) {
+            perror("Error al conectarse");
+            exit(1);
+        }
+
+        // Crear procesos hijo para conectar con otros servidores
+        switch (fork()) {
+            case 0:
+                close(sock_servidores);
+                printf("Se ha conectado el socket de escucha del servidor y se h abierto una nueva\n");
+            default:
+                close(sock_comunicacion);
+        }
+    }
+}
+
+/*
+void enviar(struct sockaddr_in servidor, struct mensaje msg) {
+    //implementar función write() para enviar mensajes al resto de servidores.
+    printf("Se está enviando mensaje a la ip: %s\n", servidor.sin_addr);
+    printf("El mensaje enviado es: %s\n", msg.valor);
+}
+
+void difundir(int servidores[], struct mensaje msg) {
+    printf("Se está difundiendo mensaje.\n");
+    int i = 0;
+    while (i<sizeof (servidores)) {
+        enviar(servidores[i], msg);
+        i++;
+    }
+}
+
+void recibir() {
+    mkfifo("FIFOrecibir");
+    int fd = open("FIFOrecibir");
+    while (1) {
+        //implementar readline() para recibir mensajes
+        int a = read();
+        printf("Se ha recibido un mensaje\n");
+        write(fd, &a, 1);
+        //llamar a r_entregar mediante cola fifo
+    }
+}
+
+void r_entregar(struct mensaje msg) {
+    //entregar mensaje a la aplicación
+    printf("Se está entregando mensaje %s\n", msg.valor);
+}
+
+int chequearMensaje(struct mensaje msg) {
+    //Si el mensaje se ha recibido anteriormente
+    if (mirar el buffer de mensajes) { 
+        return 0;
+    } else {
+        return 1;
+    }
+}
+ */
+/*IÑAKIK GEHITUTAKO KODEA*/
 
 /*
  * Funtzio honetan kodetzen da bezeroarekin komunikatu behar den prozesu umeak egin beharrekoa, aplikazio protokoloak zehaztu bezala.
@@ -492,96 +592,4 @@ int ez_ezkutua(const struct dirent *entry) {
         return (1);
 }
 
-/*IÑAKIK GEHITUTAKO KODEA*/
 
-
-void establecerSocketClientes(int sock_clientes, int elkarrizketa) {
-    //Esto se debería meter en un thread
-    while (1) {
-        // Onartu konexio eskaera eta sortu elkarrizketa socketa.
-        // Aceptar petición de conexión y crear socket
-        if ((elkarrizketa = accept(sock_clientes, NULL, NULL)) < 0) {
-            perror("Error al conectarse");
-            exit(1);
-        }
-
-        // Crear procesos hijo para conectar con cliente
-        switch (fork()) {
-            case 0:
-                close(sock_clientes);
-                sesioa(elkarrizketa);
-                close(elkarrizketa);
-                exit(0);
-            default:
-                close(elkarrizketa);
-        }
-    }
-}
-
-void *establecerSocketServidores(int sock_servidores, int sock_comunicacion) {
-    //Esto se debería meter en un thread
-    while (1) {
-        // Onartu konexio eskaera eta sortu elkarrizketa socketa.
-        // Aceptar petición de conexión y crear socket
-        if ((sock_comunicacion = accept(sock_servidores, NULL, NULL)) < 0) {
-            perror("Error al conectarse");
-            exit(1);
-        }
-
-        // Crear procesos hijo para conectar con cliente
-        switch (fork()) {
-            case 0:
-                close(sock_servidores);
-                printf("Se ha conectado el socket de escucha del servidor y se h abierto una nueva\n");
-                //no cerrar la comunicacion entre servidores
-                //close(sock_comunicacion);
-                //exit(0);
-            default:
-                close(sock_comunicacion);
-        }
-    }
-}
-
-/*
-void enviar(struct sockaddr_in servidor, struct mensaje msg) {
-    //implementar función write() para enviar mensajes al resto de servidores.
-    printf("Se está enviando mensaje a la ip: %s\n", servidor.sin_addr);
-    printf("El mensaje enviado es: %s\n", msg.valor);
-}
-
-void difundir(int servidores[], struct mensaje msg) {
-    printf("Se está difundiendo mensaje.\n");
-    int i = 0;
-    while (i<sizeof (servidores)) {
-        enviar(servidores[i], msg);
-        i++;
-    }
-}
-
-void recibir() {
-	mkfifo("FIFOrecibir");
-	int fd=open("FIFOrecibir");
-	while(1){
-		//implementar readline() para recibir mensajes
-		int a=read();
-		printf("Se ha recibido un mensaje\n");
-		write( fd, &a, 1);
-		//llamar a r_entregar mediante cola fifo
-	}
-}
-
-void r_entregar(struct mensaje msg) {
-    //entregar mensaje a la aplicación
-    printf("Se está entregando mensaje %s\n", msg.valor);
-}
-
-int chequearMensaje(struct mensaje msg) {
-    //Si el mensaje se ha recibido anteriormente
-    if (/* mirar el buffer de mensajes) { 
-        return 0;
-    } else {
-        return 1;
-    }
-}
-
-/*IÑAKIK GEHITUTAKO KODEA*/

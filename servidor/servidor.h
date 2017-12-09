@@ -43,13 +43,13 @@ int bidali_zerrenda(int s);
 unsigned long toki_librea();
 void sig_chld(int signal);
 int ez_ezkutua(const struct dirent *entry);
+
+/*GUK GEHITUTAKO KODEA*/
+void *establecerSocketServidores(void *a);
+void *establecerSocketClientes (void *a);
+int chequear_mensaje(struct mensaje);
 void enviar(struct sockaddr_in, struct mensaje);
 void r_difundir(int [], struct mensaje);
 void recibir(struct mensaje);
 void r_entregar(struct mensaje);
-int chequear_mensaje(struct mensaje);
-void establecerSocketClientes (int, int);
-
-/*GUK GEHITUTAKO KODEA*/
-void *establecerSocketServidores(int , int);
 
