@@ -216,6 +216,7 @@ void * establecerSocketServidores(void * a) {
             case 0:
                 close(sock_servidores);
                 printf("Se ha conectado el socket de escucha del servidor y se ha abierto una nueva\n");
+                // si el puerto se queda en una situacion inestable, utilizar fuser -k 6013/tcp en la terminal linux para cerrar el puerto.
                 close(sock_comunicacion);
                 exit(0);
                 break;
