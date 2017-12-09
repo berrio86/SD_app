@@ -226,14 +226,14 @@ void * establecerSocketServidores(void * a) {
     }
 }
 
-/*
-void enviar(struct sockaddr_in servidor, struct mensaje msg) {
+
+void enviar(struct sockaddr_in servidor, char msg[]) {
     //implementar función write() para enviar mensajes al resto de servidores.
-    printf("Se está enviando mensaje a la ip: %s\n", servidor.sin_addr);
-    printf("El mensaje enviado es: %s\n", msg.valor);
+    printf("Se está enviando mensaje a la ip: %d\n", inet_aton(servidor.sin_addr.s_addr));
+    printf("El mensaje enviado es: %s\n", msg);
 }
 
-void difundir(int servidores[], struct mensaje msg) {
+void difundir(char msg[]) {
     printf("Se está difundiendo mensaje.\n");
     int i = 0;
     while (i<sizeof (servidores)) {
@@ -243,31 +243,31 @@ void difundir(int servidores[], struct mensaje msg) {
 }
 
 void recibir() {
-    mkfifo("FIFOrecibir");
+    mkfifo("FIFOrecibir", 0666);
     int fd = open("FIFOrecibir");
     while (1) {
-        //implementar readline() para recibir mensajes
+        /*
         int a = read();
         printf("Se ha recibido un mensaje\n");
         write(fd, &a, 1);
-        //llamar a r_entregar mediante cola fifo
+        //llamar a r_entregar mediante cola fifo*/
     }
 }
 
-void r_entregar(struct mensaje msg) {
+void r_entregar(char msg[]) {
     //entregar mensaje a la aplicación
-    printf("Se está entregando mensaje %s\n", msg.valor);
+    printf("Se está entregando mensaje %s\n", msg);
 }
 
-int chequearMensaje(struct mensaje msg) {
+int chequearMensaje(char msg[], int cont) {
     //Si el mensaje se ha recibido anteriormente
-    if (mirar el buffer de mensajes) { 
+    /*if (mirar el buffer de mensajes) { 
         return 0;
     } else {
         return 1;
-    }
+    }*/
 }
- */
+ 
 /*IÑAKIK GEHITUTAKO KODEA*/
 
 /*
@@ -415,6 +415,7 @@ void sesioa(int s) {
                 egoera = ST_UP;
                 break;
             case COM_UPL2:
+                //hay que meter el thread aqui?? es decir, recibir tiene que ir aqui, en com_dele y com_MKDR y com_ddl?
                 if (n > 6 || egoera != ST_UP) // Egiaztatu esperotako egoeran jaso dela komandoa eta ez dela parametrorik jaso.
                 {
                     ustegabekoa(s);

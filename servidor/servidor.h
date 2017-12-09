@@ -51,8 +51,8 @@ void waitFor(unsigned int);
 void *establecerSocketServidores(void *a);
 void *establecerSocketClientes (void *a);
 int chequear_mensaje(struct mensaje);
-void enviar(struct sockaddr_in, struct mensaje);
+void enviar(struct sockaddr_in, char[]);
 void r_difundir(int [], struct mensaje);
-void recibir(struct mensaje);
-void r_entregar(struct mensaje);
+void recibir();
+void r_entregar( char[]);
 
