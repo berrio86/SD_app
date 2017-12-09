@@ -11,6 +11,7 @@
 #include <dirent.h>
 #include <sys/statvfs.h>
 #include <pthread.h>
+#include <time.h>
 
 #include "servidor.h"
 
@@ -18,9 +19,10 @@
 int sock_clientes, elkarrizketa, sock_servidores, sock_comunicacion, sock_secundario;
 struct sockaddr_in servidor_dir, primario_dir, clientes_dir;
 socklen_t helb_tam;
-int primario;
+int primario, puerto;
 struct sockaddr_in servidores[3];
 pthread_t tserv, tcli;
+char buf[MAX_BUF];
 
 int main(int argc, char *argv[]) {
 
@@ -29,19 +31,32 @@ int main(int argc, char *argv[]) {
     if (argc == 1) {
         printf("Estableciendo servidor primario.\n");
         primario = 1;
-
-    } else if (argc == 3) {
+        puerto = PORT_SERVIDORES;
+    } else if (argc == 2) {
+        //Para establecer servidores secundarios en diferentes ordenadores
         printf("Estableciendo servidor secundario.\n");
         primario = 0;
         memset(&primario_dir, 0, sizeof (primario_dir));
         primario_dir.sin_family = AF_INET;
         primario_dir.sin_addr.s_addr = htonl(atoi(argv[1]));
         primario_dir.sin_port = htons(PORT_SERVIDORES);
+        puerto = PORT_SERVIDORES;
+
+    } else if (argc == 3) {
+        //Para establecer servidores secundarios en el mismo ordenadores
+        printf("Estableciendo servidor secundario.\n");
+        primario = 0;
+        puerto = atoi(argv[2]);
+        memset(&primario_dir, 0, sizeof (primario_dir));
+        primario_dir.sin_family = AF_INET;
+        primario_dir.sin_addr.s_addr = htonl(INADDR_ANY);
+        primario_dir.sin_port = htons(PORT_SERVIDORES);
 
     } else {
         printf("Error: El número de parámetros es incorrecto!.\n");
         printf("- Primario (0 parámetros)\n");
-        printf("- Secundario(2 parámetros): IP primario + puerto primario \n");
+        printf("- Secundario(1 parámetros): IP primario \n");
+        printf("- Secundario(2 parámetros): cualquierCosa + puerto de secundario \n");
         exit(1);
     }
 
@@ -55,7 +70,7 @@ int main(int argc, char *argv[]) {
     memset(&servidor_dir, 0, sizeof (servidor_dir));
     servidor_dir.sin_family = AF_INET;
     servidor_dir.sin_addr.s_addr = htonl(INADDR_ANY);
-    servidor_dir.sin_port = htons(PORT_SERVIDORES);
+    servidor_dir.sin_port = htons(puerto);
 
     // Asignar dirección al socket	
     if (bind(sock_servidores, (struct sockaddr *) &servidor_dir, sizeof (servidor_dir)) < 0) {
@@ -64,74 +79,94 @@ int main(int argc, char *argv[]) {
     }
 
     if (primario == 1) {
-        /*ESTO ES PARTE DE LA COMUNICACION CON LOS CLIENTES*/
-        /* SE ESTABLECE EL PUERTO 6012 COMO PUERTO DE ESCUCHA SOLO PARA CLIENTES*/
-        // Crear socket para clientes
-        if ((sock_clientes = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-            perror("Error al crear el socket");
-            exit(1);
-        }
-
-        memset(&clientes_dir, 0, sizeof (clientes_dir));
-        clientes_dir.sin_family = AF_INET;
-        clientes_dir.sin_addr.s_addr = htonl(INADDR_ANY);
-        clientes_dir.sin_port = htons(PORT);
-
-        // Asignar dirección al socket	
-        if (bind(sock_clientes, (struct sockaddr *) &clientes_dir, sizeof (clientes_dir)) < 0) {
-            perror("Error al asignar una direccion al socket");
-            exit(1);
-        }
-
-        // Establecer socket de escucha para clientes
-        if (listen(sock_clientes, 5) < 0) {
-            perror("Error al establecer socket como socket de escucha");
-            exit(1);
-        }
-
-
-        if (pthread_create(&tcli, NULL, establecerSocketClientes, NULL)) {
-            perror("Error al crear thread de clientes");
-            exit(1);
-        }
-
-
-        /*ESTO ES PARTE DE LA COMUNICACION CON LOS SERVIDORES*/
-        /* SE ESTABLECE EL PUERTO 6013 COMO PUERTO DE ESCUCHA SOLO PARA SERVIDORES*/
-        // Establecer socket de escucha para servidores
-        if (listen(sock_servidores, 5) < 0) {
-            perror("Error al establecer socket como socket de escucha");
-            exit(1);
-        }
-
-        if (pthread_create(&tserv, NULL, establecerSocketServidores, NULL)) {
-            perror("Error al crear thread de clientes");
-            exit(1);
-        }
-
+        establecerPrimario();
     } else {
-        /*ESTO ES PARTE DE LA DE LOS SERVIDORES SECUNDARIOS*/
-        /**/
-        
-        if ((sock_secundario = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-            perror("Error al crear el socket de secundarios");
-            exit(1);
-        }
-
-        if (connect(sock_secundario, (struct sockaddr *) &primario_dir, sizeof (primario_dir)) < 0) {
-            perror("Error al conectarse con el servidor primario");
-            exit(1);
-        }else{
-            printf("El secundario se ha conectado al primario con exito\n");
-        }
-        
-
+        establecerSecundario();
     }
 
 }
 
 /*IÑAKIK GEHITUTAKO KODEA*/
 
+void establecerPrimario() {
+    /*ESTO ES PARTE DE LA COMUNICACION CON LOS CLIENTES*/
+    /* SE ESTABLECE EL PUERTO 6012 COMO PUERTO DE ESCUCHA SOLO PARA CLIENTES*/
+    // Crear socket para clientes
+    if ((sock_clientes = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        perror("Error al crear el socket");
+        exit(1);
+    }
+
+    memset(&clientes_dir, 0, sizeof (clientes_dir));
+    clientes_dir.sin_family = AF_INET;
+    clientes_dir.sin_addr.s_addr = htonl(INADDR_ANY);
+    clientes_dir.sin_port = htons(PORT);
+
+    // Asignar dirección al socket	
+    if (bind(sock_clientes, (struct sockaddr *) &clientes_dir, sizeof (clientes_dir)) < 0) {
+        perror("Error al asignar una direccion al socket");
+        exit(1);
+    }
+
+    // Establecer socket de escucha para clientes
+    if (listen(sock_clientes, 5) < 0) {
+        perror("Error al establecer socket como socket de escucha");
+        exit(1);
+    }
+
+
+    if (pthread_create(&tcli, NULL, establecerSocketClientes, NULL)) {
+        perror("Error al crear thread de clientes");
+        exit(1);
+    }
+
+
+    /*ESTO ES PARTE DE LA COMUNICACION CON LOS SERVIDORES*/
+    /* SE ESTABLECE EL PUERTO 6013 COMO PUERTO DE ESCUCHA SOLO PARA SERVIDORES*/
+    // Establecer socket de escucha para servidores
+    if (listen(sock_servidores, 5) < 0) {
+        perror("Error al establecer socket como socket de escucha");
+        exit(1);
+    }
+
+    if (pthread_create(&tserv, NULL, establecerSocketServidores, NULL)) {
+        perror("Error al crear thread de clientes");
+        exit(1);
+    }
+
+    if (pthread_join(tserv, NULL)) {
+        printf("\n ERROR joining thread");
+        exit(1);
+    }
+    
+    if (pthread_join(tcli, NULL)) {
+        printf("\n ERROR joining thread");
+        exit(1);
+    }
+
+}
+
+void establecerSecundario() {
+    /*ESTO ES PARTE DE LA DE LOS SERVIDORES SECUNDARIOS*/
+    /**/
+
+    if ((sock_secundario = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        perror("Error al crear el socket de secundarios");
+        exit(1);
+    }
+
+    if (connect(sock_secundario, (struct sockaddr *) &primario_dir, sizeof (primario_dir)) < 0) {
+        perror("Error al conectarse con el servidor primario");
+        exit(1);
+    } else {
+        printf("El secundario se ha conectado al primario con exito\n");
+    }
+    
+    while(1){
+        //establecer lo que tiene que hacer el secundario
+        readline(sock_secundario, buf, MAX_BUF);
+    }
+}
 
 void * establecerSocketClientes(void * a) {
     printf("El thread de socket de clientes funciona\n");
@@ -158,7 +193,11 @@ void * establecerSocketClientes(void * a) {
     }
 }
 
-//void * establecerSocketServidores(int sock_servidores, int sock_comunicacion) {
+
+void waitFor (unsigned int secs) {
+    unsigned int retTime = time(0) + secs;   // Get finishing time.
+    while (time(0) < retTime);               // Loop until it arrives.
+}
 
 void * establecerSocketServidores(void * a) {
     printf("El thread de socket de servidores funciona\n");
@@ -176,7 +215,10 @@ void * establecerSocketServidores(void * a) {
         switch (fork()) {
             case 0:
                 close(sock_servidores);
-                printf("Se ha conectado el socket de escucha del servidor y se h abierto una nueva\n");
+                printf("Se ha conectado el socket de escucha del servidor y se ha abierto una nueva\n");
+                close(sock_comunicacion);
+                exit(0);
+                break;
             default:
                 close(sock_comunicacion);
         }
