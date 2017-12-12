@@ -17,16 +17,19 @@
 
 
 int sock_clientes, elkarrizketa, sock_servidores, sock_comunicacion, sock_secundario;
-struct sockaddr_in servidor_dir, primario_dir, clientes_dir;
-socklen_t helb_tam;
-int primario, puerto;
-struct sockaddr_in servidores[3];
-pthread_t tserv, tcli;
+struct sockaddr_in servidor_dir, primario_dir, clientes_dir, nuevosecundario_dir;
+//struct sockaddr nuevosecundario_dir;
+socklen_t helb_tam, nuevosecundario_size;
+int primario, puerto, contador_servidores;
+struct sockaddr_in servidores[3], servidores_helper[3];
+pthread_t tserv, tcli, tsec;
+char str[INET_ADDRSTRLEN];
 char buf[MAX_BUF];
 
 int main(int argc, char *argv[]) {
 
     primario = 0;
+    contador_servidores = 0;
 
     if (argc == 1) {
         printf("Estableciendo servidor primario.\n");
@@ -41,6 +44,7 @@ int main(int argc, char *argv[]) {
         primario_dir.sin_addr.s_addr = htonl(atoi(argv[1]));
         primario_dir.sin_port = htons(PORT_SERVIDORES);
         puerto = PORT_SERVIDORES;
+        //servidores[0]=primario_dir;
 
     } else if (argc == 3) {
         //Para establecer servidores secundarios en el mismo ordenadores
@@ -66,8 +70,10 @@ int main(int argc, char *argv[]) {
         perror("Error al crear el socket");
         exit(1);
     }
-
+    //inicializar todos los sockets con 0s
     memset(&servidor_dir, 0, sizeof (servidor_dir));
+
+
     servidor_dir.sin_family = AF_INET;
     servidor_dir.sin_addr.s_addr = htonl(INADDR_ANY);
     servidor_dir.sin_port = htons(puerto);
@@ -85,7 +91,6 @@ int main(int argc, char *argv[]) {
     }
 
 }
-
 
 void establecerPrimario() {
     /*ESTO ES PARTE DE LA COMUNICACION CON LOS CLIENTES*/
@@ -122,6 +127,12 @@ void establecerPrimario() {
 
     /*ESTO ES PARTE DE LA COMUNICACION CON LOS SERVIDORES*/
     /* SE ESTABLECE EL PUERTO 6013 COMO PUERTO DE ESCUCHA SOLO PARA SERVIDORES*/
+
+    //establecer direccion para guardar nuevas direcciones de secundarios
+    memset(&clientes_dir, 0, sizeof (clientes_dir));
+    nuevosecundario_dir.sin_family = AF_INET;
+    nuevosecundario_size = sizeof (nuevosecundario_dir);
+
     // Establecer socket de escucha para servidores
     if (listen(sock_servidores, 5) < 0) {
         perror("Error al establecer socket como socket de escucha");
@@ -137,7 +148,7 @@ void establecerPrimario() {
         printf("\n ERROR joining thread");
         exit(1);
     }
-    
+
     if (pthread_join(tcli, NULL)) {
         printf("\n ERROR joining thread");
         exit(1);
@@ -149,8 +160,10 @@ void establecerSecundario() {
     /*ESTO ES PARTE DE LA DE LOS SERVIDORES SECUNDARIOS*/
     /**/
 
-mkfifo(itoa(puerto), 0666);
-fopen(itoa(puerto), "r+");
+    //mkfifo(itoa(puerto), 0666);
+    //fopen(itoa(puerto), "r+");
+
+    //se debe establecer un thread para recibir actualizaciones de lista de servidores
 
     if ((sock_secundario = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         perror("Error al crear el socket de secundarios");
@@ -163,10 +176,22 @@ fopen(itoa(puerto), "r+");
     } else {
         printf("El secundario se ha conectado al primario con exito\n");
     }
-    
-    while(1){
+
+    if (pthread_create(&tsec, NULL, recibirListaDeServidores, NULL)) {
+        perror("Error al crear thread de clientes");
+        exit(1);
+    }
+
+    /*
+    while (1) {
         //establecer lo que tiene que hacer el secundario
         readline(sock_secundario, buf, MAX_BUF);
+    }
+     */
+
+    if (pthread_join(tsec, NULL)) {
+        printf("\n ERROR joining thread");
+        exit(1);
     }
 }
 
@@ -195,7 +220,6 @@ void * establecerSocketClientes(void * a) {
     }
 }
 
-
 void * establecerSocketServidores(void * a) {
     printf("El thread de socket de servidores funciona\n");
     // No se hara nada al recibir SIG_CHLD. De esta forma los prozesos hijo terminados, no se quedarán tipo zombie
@@ -203,7 +227,7 @@ void * establecerSocketServidores(void * a) {
     while (1) {
         // Onartu konexio eskaera eta sortu elkarrizketa socketa.
         // Aceptar petición de conexión y crear socket
-        if ((sock_comunicacion = accept(sock_servidores, NULL, NULL)) < 0) {
+        if ((sock_comunicacion = accept(sock_servidores, (struct sockaddr *) &nuevosecundario_dir, &nuevosecundario_size)) < 0) {
             perror("Error al conectarse");
             exit(1);
         }
@@ -212,8 +236,13 @@ void * establecerSocketServidores(void * a) {
         switch (fork()) {
             case 0:
                 close(sock_servidores);
-                printf("Se ha conectado el socket de escucha del servidor y se ha abierto una nueva\n");
+                printf("Se ha cerrado el socket de escucha del servidor y se ha abierto una nueva\n");
                 // si el puerto se queda en una situacion inestable, utilizar fuser -k 6013/tcp en la terminal linux para cerrar el puerto. No deberia
+                //creo que esto se deberia de hacer lock y unlock
+                actualizarListaServidores(nuevosecundario_dir);
+                enviarListaDeServidores(sock_comunicacion);
+                //hasta aqui
+                //parece ser que si no se cierra el socket, no funciona. No debería ser así porque son subprocesos...
                 close(sock_comunicacion);
                 exit(0);
                 break;
@@ -223,8 +252,50 @@ void * establecerSocketServidores(void * a) {
     }
 }
 
+void actualizarListaServidores(struct sockaddr_in dir) {
+    printf("Se está actualizando la lista de servidores\n");
+    servidores[contador_servidores] = dir;
+    contador_servidores++;
+    printf("Contador servidores: %d", contador_servidores);
+    int i;
+    //int size = sizeof (servidores) / sizeof (struct sockaddr_in);
+    for (i = 0; i < contador_servidores+1; i++) {
+        inet_ntop(AF_INET, &(servidores[i].sin_addr), str, INET_ADDRSTRLEN);
+        printf("    Direccion IP del servidor %d :%s\n", i, str);
+    }
+}
 
+void enviarListaDeServidores(int sock) {
+    printf("Se está enviando la lista de servidores\n");
+    int i = 0;
+    //int size = sizeof (servidores) / sizeof (struct sockaddr_in);
+    for (i = 0; i < contador_servidores+1; i++) {
+        if (write(sock, &servidores, sizeof (servidores)) < 0) {
+            perror("    Error al enviar la lista de servidores");
+        } else {
+            printf("    Enviando lista a servidor numero %d\n", i);
+        }
+    }
+}
 
+void * recibirListaDeServidores(void * a) {
+    //esto debería de ir en un thread
+    while (1) {
+        if (read(sock_secundario, &servidores_helper, sizeof (servidores_helper)) < 0) {
+            perror("Error al recibir lista de servidores");
+        } else {
+            //servidores = *servidores_helper;
+            int i;
+            int size = sizeof (servidores) / sizeof (struct sockaddr_in);
+            for (i = 0; i < size; i++) {
+                servidores[i]=servidores_helper[i];
+                inet_ntop(AF_INET, &(servidores[i].sin_addr), str, INET_ADDRSTRLEN);
+                printf("Direccion IP del servidor %d :%s\n", i, str);
+            }
+            printf("Lista de sockets nuevo recibida y actualizada\n");
+        }
+    }
+}
 
 int chequearMensaje(char msg[], int cont) {
     //Si el mensaje se ha recibido anteriormente
@@ -234,7 +305,6 @@ int chequearMensaje(char msg[], int cont) {
         return 1;
     }*/
 }
- 
 
 /*
  * Funtzio honetan kodetzen da bezeroarekin komunikatu behar den prozesu umeak egin beharrekoa, aplikazio protokoloak zehaztu bezala.
@@ -253,14 +323,14 @@ void sesioa(int s) {
 
     while (1) {
         // Irakurri bezeroak bidalitako mezua.
-	// primario o secundario aqui, fifo o readline
-	if(primario==1){
-		if ((n = readline(s, buf, MAX_BUF)) <= 0)
-            	return;
-	}else{
-		//leer desde secundario mediante colas fifo.	
-	}
-        
+        // primario o secundario aqui, fifo o readline
+        if (primario == 1) {
+            if ((n = readline(s, buf, MAX_BUF)) <= 0)
+                return;
+        } else {
+            //leer desde secundario mediante colas fifo.	
+        }
+
 
         // Aztertu jasotako komandoa ezaguna den ala ez.
         if ((komando = bilatu_substring(buf, KOMANDOAK)) < 0) {
@@ -517,21 +587,21 @@ int readline(int stream, char *buf, int tam) {
 }
 
 void * difusion_fiable(void * a) {
-    
+
     while (1) {
-        int a = read(stream, &c, 1);
-        printf("Se ha recibido un mensaje\n");        
+        //int a = read(stream, &c, 1);
+        printf("Se ha recibido un mensaje\n");
         //llamar a r_entregar mediante cola fifo*/
-	r_entregar();
+        //r_entregar();
     }
 }
 
 void r_entregar(char msg[]) {
     //entregar mensaje a la aplicaciónç
-	//mkfifo("FIFOrecibir", 0666); //crear antes, un unico fifo
+    //mkfifo("FIFOrecibir", 0666); //crear antes, un unico fifo
     //int fd = open("FIFOrecibir");
     printf("Se está entregando mensaje %s\n", msg);
-	//llamar a funcion sesion
+    //llamar a funcion sesion
 }
 
 void enviar(struct sockaddr_in servidor, char msg[]) {
@@ -548,8 +618,6 @@ void difundir(char msg[]) {
         i++;
     }
 }
-
-
 
 /*
  * 'string' parametroko karaktere katea bilatzen du 'string_zerr' parametroan. 'string_zerr' bektoreko azkeneko elementua NULL izan behar da.
