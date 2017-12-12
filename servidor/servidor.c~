@@ -516,7 +516,7 @@ int readline(int stream, char *buf, int tam) {
     return -2;
 }
 
-void * difusion_fiable(void * a) {
+void * recibir(void * a) {
     
     while (1) {
         int a = read(stream, &c, 1);
@@ -526,12 +526,12 @@ void * difusion_fiable(void * a) {
     }
 }
 
-void r_entregar(char msg[]) {
+void difusion_fiable(char msg[]) {
     //entregar mensaje a la aplicaciónç
-	//mkfifo("FIFOrecibir", 0666); //crear antes, un unico fifo
-    //int fd = open("FIFOrecibir");
+	
+    int fd = open(itoa(puerto));
     printf("Se está entregando mensaje %s\n", msg);
-	//llamar a funcion sesion
+ 	//llamar a funcion sesion
 }
 
 void enviar(struct sockaddr_in servidor, char msg[]) {
