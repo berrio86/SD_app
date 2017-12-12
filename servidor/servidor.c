@@ -18,12 +18,13 @@
 
 int sock_clientes, elkarrizketa, sock_servidores, sock_comunicacion, sock_secundario;
 struct sockaddr_in servidor_dir, primario_dir, clientes_dir, nuevosecundario_dir;
-//struct sockaddr nuevosecundario_dir;
 socklen_t helb_tam, nuevosecundario_size;
 int primario, puerto, contador_servidores;
-struct sockaddr_in servidores[3], servidores_helper[3];
+struct sockaddr_in servidores_dir[3], servidores_helper[3];
+int servidores_sock[3];
+
 pthread_t tserv, tcli, tsec;
-char str[INET_ADDRSTRLEN];
+char ip[INET_ADDRSTRLEN];
 char buf[MAX_BUF];
 
 int main(int argc, char *argv[]) {
@@ -231,20 +232,21 @@ void * establecerSocketServidores(void * a) {
             perror("Error al conectarse");
             exit(1);
         }
-
+        
+        actualizarListaServidores(nuevosecundario_dir, sock_comunicacion);
+        enviarListaDeServidores();
         // Crear procesos hijo para conectar con otros servidores
         switch (fork()) {
             case 0:
                 close(sock_servidores);
-                printf("Se ha cerrado el socket de escucha del servidor y se ha abierto una nueva\n");
+                //printf("Se ha cerrado el socket de escucha del servidor y se ha abierto una nueva\n");
                 // si el puerto se queda en una situacion inestable, utilizar fuser -k 6013/tcp en la terminal linux para cerrar el puerto. No deberia
                 //creo que esto se deberia de hacer lock y unlock
-                actualizarListaServidores(nuevosecundario_dir);
-                enviarListaDeServidores(sock_comunicacion);
+                
                 //hasta aqui
                 //parece ser que si no se cierra el socket, no funciona. No debería ser así porque son subprocesos...
-                close(sock_comunicacion);
-                exit(0);
+                //close(sock_comunicacion);
+                //exit(0);
                 break;
             default:
                 close(sock_comunicacion);
@@ -252,25 +254,27 @@ void * establecerSocketServidores(void * a) {
     }
 }
 
-void actualizarListaServidores(struct sockaddr_in dir) {
+void actualizarListaServidores(struct sockaddr_in dir, int sock) {
     printf("Se está actualizando la lista de servidores\n");
-    servidores[contador_servidores] = dir;
-    contador_servidores++;
-    printf("Contador servidores: %d", contador_servidores);
+    servidores_dir[contador_servidores] = dir;
+    servidores_sock[contador_servidores] = sock; 
+    contador_servidores += 1;
+    printf("Contador servidores: %d\n", contador_servidores);
     int i;
     //int size = sizeof (servidores) / sizeof (struct sockaddr_in);
-    for (i = 0; i < contador_servidores+1; i++) {
-        inet_ntop(AF_INET, &(servidores[i].sin_addr), str, INET_ADDRSTRLEN);
-        printf("    Direccion IP del servidor %d :%s\n", i, str);
+    for (i = 0; i < contador_servidores; i++) {
+        inet_ntop(AF_INET, &(servidores_dir[i].sin_addr), ip, INET_ADDRSTRLEN);
+        printf("    Direccion IP del servidor %d: %s:%d\n", i, ip, ntohs(servidores_dir[i].sin_port));
+        printf("    Identificador del socket de %s: %d\n", ip, servidores_sock[i]);
     }
 }
 
-void enviarListaDeServidores(int sock) {
+void enviarListaDeServidores() {
     printf("Se está enviando la lista de servidores\n");
     int i = 0;
     //int size = sizeof (servidores) / sizeof (struct sockaddr_in);
-    for (i = 0; i < contador_servidores+1; i++) {
-        if (write(sock, &servidores, sizeof (servidores)) < 0) {
+    for (i = 0; i < contador_servidores; i++) {
+        if (write(servidores_sock[i], &servidores_dir, sizeof (servidores_dir)) < 0) {
             perror("    Error al enviar la lista de servidores");
         } else {
             printf("    Enviando lista a servidor numero %d\n", i);
@@ -286,11 +290,11 @@ void * recibirListaDeServidores(void * a) {
         } else {
             //servidores = *servidores_helper;
             int i;
-            int size = sizeof (servidores) / sizeof (struct sockaddr_in);
+            int size = sizeof (servidores_dir) / sizeof (struct sockaddr_in);
             for (i = 0; i < size; i++) {
-                servidores[i]=servidores_helper[i];
-                inet_ntop(AF_INET, &(servidores[i].sin_addr), str, INET_ADDRSTRLEN);
-                printf("Direccion IP del servidor %d :%s\n", i, str);
+                servidores_dir[i]=servidores_helper[i];
+                inet_ntop(AF_INET, &(servidores_dir[i].sin_addr), ip, INET_ADDRSTRLEN);
+                printf("Direccion IP del servidor %d: %s:%d\n", i, ip, ntohs(servidores_dir[i].sin_port));
             }
             printf("Lista de sockets nuevo recibida y actualizada\n");
         }
@@ -613,8 +617,8 @@ void enviar(struct sockaddr_in servidor, char msg[]) {
 void difundir(char msg[]) {
     printf("Se está difundiendo mensaje.\n");
     int i = 0;
-    while (i<sizeof (servidores)) {
-        enviar(servidores[i], msg);
+    while (i<sizeof (servidores_dir)) {
+        enviar(servidores_dir[i], msg);
         i++;
     }
 }

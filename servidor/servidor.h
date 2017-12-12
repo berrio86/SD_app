@@ -55,7 +55,7 @@ void enviar(struct sockaddr_in, char[]);
 void r_difundir(int [], struct mensaje);
 void recibir();
 void r_entregar( char[]);
-void actualizarListaServidores(struct sockaddr_in);
+void actualizarListaServidores(struct sockaddr_in, int);
 void enviarListaDeServidores();
 void * recibirListaDeServidores(void *a);
 
