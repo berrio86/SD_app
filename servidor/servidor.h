@@ -47,6 +47,7 @@ int ez_ezkutua(const struct dirent *entry);
 /*GUK GEHITUTAKO KODEA*/
 void establecerPrimario();
 void establecerSecundario();
+void establecerParteComun();
 void waitFor(unsigned int);
 void *establecerSocketServidores(void *a);
 void *establecerSocketClientes (void *a);

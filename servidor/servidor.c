@@ -65,7 +65,19 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
+    establecerParteComun();
 
+    
+
+    if (primario == 1) {
+        establecerPrimario();
+    } else {
+        establecerSecundario();
+    }
+
+}
+
+void establecerParteComun(){
     //Crear socket para servidores
     if ((sock_servidores = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         perror("Error al crear el socket");
@@ -84,13 +96,30 @@ int main(int argc, char *argv[]) {
         perror("Error al asignar una direccion al socket");
         exit(1);
     }
+    
+    /*ESTO ES PARTE DE LA COMUNICACION CON LOS SERVIDORES*/
+    /* SE ESTABLECE LA VARIABLE puerto COMO PUERTO DE ESCUCHA SOLO PARA SERVIDORES*/
 
-    if (primario == 1) {
-        establecerPrimario();
-    } else {
-        establecerSecundario();
+    //establecer direccion para guardar nuevas direcciones de secundarios
+    memset(&nuevosecundario_dir, 0, sizeof (nuevosecundario_dir));
+    nuevosecundario_dir.sin_family = AF_INET;
+    nuevosecundario_size = sizeof (nuevosecundario_dir);
+
+    // Establecer socket de escucha para servidores
+    if (listen(sock_servidores, 5) < 0) {
+        perror("Error al establecer socket como socket de escucha");
+        exit(1);
     }
 
+    if (pthread_create(&tserv, NULL, establecerSocketServidores, NULL)) {
+        perror("Error al crear thread de clientes");
+        exit(1);
+    }
+
+    /*if (pthread_join(tserv, NULL)) {
+        printf("\n ERROR joining thread");
+        exit(1);
+    }*/
 }
 
 void establecerPrimario() {
@@ -125,35 +154,14 @@ void establecerPrimario() {
         exit(1);
     }
 
-
-    /*ESTO ES PARTE DE LA COMUNICACION CON LOS SERVIDORES*/
-    /* SE ESTABLECE EL PUERTO 6013 COMO PUERTO DE ESCUCHA SOLO PARA SERVIDORES*/
-
-    //establecer direccion para guardar nuevas direcciones de secundarios
-    memset(&clientes_dir, 0, sizeof (clientes_dir));
-    nuevosecundario_dir.sin_family = AF_INET;
-    nuevosecundario_size = sizeof (nuevosecundario_dir);
-
-    // Establecer socket de escucha para servidores
-    if (listen(sock_servidores, 5) < 0) {
-        perror("Error al establecer socket como socket de escucha");
-        exit(1);
-    }
-
-    if (pthread_create(&tserv, NULL, establecerSocketServidores, NULL)) {
-        perror("Error al crear thread de clientes");
-        exit(1);
-    }
-
-    if (pthread_join(tserv, NULL)) {
-        printf("\n ERROR joining thread");
-        exit(1);
-    }
-
     if (pthread_join(tcli, NULL)) {
         printf("\n ERROR joining thread");
         exit(1);
     }
+    
+    
+
+    
 
 }
 
@@ -234,11 +242,15 @@ void * establecerSocketServidores(void * a) {
         }
         
         actualizarListaServidores(nuevosecundario_dir, sock_comunicacion);
-        enviarListaDeServidores();
+        
+        
         // Crear procesos hijo para conectar con otros servidores
         switch (fork()) {
             case 0:
                 close(sock_servidores);
+                enviarListaDeServidores();
+                close(sock_comunicacion);
+                exit(0);
                 //printf("Se ha cerrado el socket de escucha del servidor y se ha abierto una nueva\n");
                 // si el puerto se queda en una situacion inestable, utilizar fuser -k 6013/tcp en la terminal linux para cerrar el puerto. No deberia
                 //creo que esto se deberia de hacer lock y unlock
@@ -283,11 +295,16 @@ void enviarListaDeServidores() {
 }
 
 void * recibirListaDeServidores(void * a) {
-    //esto debería de ir en un thread
+    int x;
+    
+    
     while (1) {
-        if (read(sock_secundario, &servidores_helper, sizeof (servidores_helper)) < 0) {
+        x=read(sock_secundario, &servidores_helper, sizeof (servidores_helper));
+        if (x< 0) {
             perror("Error al recibir lista de servidores");
-        } else {
+        } else if (x==0){
+            printf("No hay bytes que leer, hay que cerrar el socket.\n");
+        } else{
             //servidores = *servidores_helper;
             int i;
             int size = sizeof (servidores_dir) / sizeof (struct sockaddr_in);
@@ -298,6 +315,7 @@ void * recibirListaDeServidores(void * a) {
             }
             printf("Lista de sockets nuevo recibida y actualizada\n");
         }
+        close(sock_secundario);
     }
 }
 
