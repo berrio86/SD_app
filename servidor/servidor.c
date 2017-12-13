@@ -67,8 +67,6 @@ int main(int argc, char *argv[]) {
 
     establecerParteComun();
 
-    
-
     if (primario == 1) {
         establecerPrimario();
     } else {
@@ -77,7 +75,7 @@ int main(int argc, char *argv[]) {
 
 }
 
-void establecerParteComun(){
+void establecerParteComun() {
     //Crear socket para servidores
     if ((sock_servidores = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         perror("Error al crear el socket");
@@ -96,7 +94,7 @@ void establecerParteComun(){
         perror("Error al asignar una direccion al socket");
         exit(1);
     }
-    
+
     /*ESTO ES PARTE DE LA COMUNICACION CON LOS SERVIDORES*/
     /* SE ESTABLECE LA VARIABLE puerto COMO PUERTO DE ESCUCHA SOLO PARA SERVIDORES*/
 
@@ -158,10 +156,10 @@ void establecerPrimario() {
         printf("\n ERROR joining thread");
         exit(1);
     }
-    
-    
 
-    
+
+
+
 
 }
 
@@ -240,21 +238,18 @@ void * establecerSocketServidores(void * a) {
             perror("Error al conectarse");
             exit(1);
         }
-        
+
         actualizarListaServidores(nuevosecundario_dir, sock_comunicacion);
-        
-        
+
         // Crear procesos hijo para conectar con otros servidores
         switch (fork()) {
             case 0:
                 close(sock_servidores);
                 enviarListaDeServidores();
-                close(sock_comunicacion);
-                exit(0);
                 //printf("Se ha cerrado el socket de escucha del servidor y se ha abierto una nueva\n");
                 // si el puerto se queda en una situacion inestable, utilizar fuser -k 6013/tcp en la terminal linux para cerrar el puerto. No deberia
                 //creo que esto se deberia de hacer lock y unlock
-                
+
                 //hasta aqui
                 //parece ser que si no se cierra el socket, no funciona. No debería ser así porque son subprocesos...
                 //close(sock_comunicacion);
@@ -269,7 +264,7 @@ void * establecerSocketServidores(void * a) {
 void actualizarListaServidores(struct sockaddr_in dir, int sock) {
     printf("Se está actualizando la lista de servidores\n");
     servidores_dir[contador_servidores] = dir;
-    servidores_sock[contador_servidores] = sock; 
+    servidores_sock[contador_servidores] = sock;
     contador_servidores += 1;
     printf("Contador servidores: %d\n", contador_servidores);
     int i;
@@ -296,26 +291,27 @@ void enviarListaDeServidores() {
 
 void * recibirListaDeServidores(void * a) {
     int x;
-    
-    
     while (1) {
-        x=read(sock_secundario, &servidores_helper, sizeof (servidores_helper));
-        if (x< 0) {
-            perror("Error al recibir lista de servidores");
-        } else if (x==0){
-            printf("No hay bytes que leer, hay que cerrar el socket.\n");
-        } else{
-            //servidores = *servidores_helper;
-            int i;
-            int size = sizeof (servidores_dir) / sizeof (struct sockaddr_in);
-            for (i = 0; i < size; i++) {
-                servidores_dir[i]=servidores_helper[i];
-                inet_ntop(AF_INET, &(servidores_dir[i].sin_addr), ip, INET_ADDRSTRLEN);
-                printf("Direccion IP del servidor %d: %s:%d\n", i, ip, ntohs(servidores_dir[i].sin_port));
+        while (1) {
+            x = read(sock_secundario, &servidores_helper, sizeof (servidores_helper));
+            if (x < 0) {
+                perror("Error al recibir lista de servidores");
+            } else if (x == 0) {
+                printf("No hay bytes que leer, hay que cerrar el socket.\n");
+                close(sock_secundario);
+                break;
+            } else {
+                //servidores = *servidores_helper;
+                int i;
+                int size = sizeof (servidores_dir) / sizeof (struct sockaddr_in);
+                for (i = 0; i < size; i++) {
+                    servidores_dir[i] = servidores_helper[i];
+                    inet_ntop(AF_INET, &(servidores_dir[i].sin_addr), ip, INET_ADDRSTRLEN);
+                    printf("Direccion IP del servidor %d: %s:%d\n", i, ip, ntohs(servidores_dir[i].sin_port));
+                }
+                printf("Lista de sockets nuevo recibida y actualizada\n");
             }
-            printf("Lista de sockets nuevo recibida y actualizada\n");
         }
-        close(sock_secundario);
     }
 }
 
