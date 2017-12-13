@@ -22,6 +22,11 @@ socklen_t helb_tam, nuevosecundario_size;
 int primario, puerto, contador_servidores;
 struct sockaddr_in servidores_dir[3], servidores_helper[3];
 int servidores_sock[3];
+int contador_mensajes;
+
+int fifo;
+
+struct mensaje mensaje_recibido;
 
 pthread_t tserv, tcli, tsec;
 char ip[INET_ADDRSTRLEN];
@@ -31,7 +36,8 @@ int main(int argc, char *argv[]) {
 
     primario = 0;
     contador_servidores = 0;
-
+    contador_mensajes=0;
+ 
     if (argc == 1) {
         printf("Estableciendo servidor primario.\n");
         primario = 1;
@@ -166,9 +172,9 @@ void establecerPrimario() {
 void establecerSecundario() {
     /*ESTO ES PARTE DE LA DE LOS SERVIDORES SECUNDARIOS*/
     /**/
-
-    //mkfifo(itoa(puerto), 0666);
-    //fopen(itoa(puerto), "r+");
+    
+    mkfifo(itoa(puerto), 0666);
+    fifo = fopen(itoa(puerto), "r+");
 
     //se debe establecer un thread para recibir actualizaciones de lista de servidores
 
@@ -315,15 +321,6 @@ void * recibirListaDeServidores(void * a) {
     }
 }
 
-int chequearMensaje(char msg[], int cont) {
-    //Si el mensaje se ha recibido anteriormente
-    /*if (mirar el buffer de mensajes) { 
-        return 0;
-    } else {
-        return 1;
-    }*/
-}
-
 /*
  * Funtzio honetan kodetzen da bezeroarekin komunikatu behar den prozesu umeak egin beharrekoa, aplikazio protokoloak zehaztu bezala.
  * Parametro gisa elkarrizketa socketa pasa behar zaio.
@@ -346,7 +343,8 @@ void sesioa(int s) {
             if ((n = readline(s, buf, MAX_BUF)) <= 0)
                 return;
         } else {
-            //leer desde secundario mediante colas fifo.	
+            //leer desde secundario mediante colas fifo.
+            
         }
 
 
@@ -575,7 +573,9 @@ void sesioa(int s) {
  * 'tam' parametroan adierazitako karaktere kopurua irakurriz gero "\r\n" aurkitu gabe -2 itzuliko du.
  * Beste edozein error gertatu ezkero -3 itzuliko du.
  */
-int readline(int stream, char *buf, int tam) {
+
+
+int  readline(int stream, char *buf, int tam) {
     /*
             Kontuz! Inplementazio hau sinplea da, baina ez da batere eraginkorra.
      */
@@ -594,8 +594,11 @@ int readline(int stream, char *buf, int tam) {
         if (n < 0)
             return -3;
         buf[guztira++] = c;
-        if (cr && c == '\n')
+        if (cr && c == '\n'){
+            difundir(buf);
             return guztira;
+        }
+            
         else if (c == '\r')
             cr = 1;
         else
@@ -604,39 +607,55 @@ int readline(int stream, char *buf, int tam) {
     return -2;
 }
 
-void * difusion_fiable(void * a) {
-
-    while (1) {
-        //int a = read(stream, &c, 1);
-        printf("Se ha recibido un mensaje\n");
-        //llamar a r_entregar mediante cola fifo*/
-        //r_entregar();
-    }
-}
-
-void r_entregar(char msg[]) {
+void * r_entregar(void *) {
     //entregar mensaje a la aplicaciónç
     //mkfifo("FIFOrecibir", 0666); //crear antes, un unico fifo
     //int fd = open("FIFOrecibir");
     printf("Se está entregando mensaje %s\n", msg);
+    read(fifo, mensaje_recibido.valor, sizeof(mensaje_recibido.valor));
     //llamar a funcion sesion
 }
 
-void enviar(struct sockaddr_in servidor, char msg[]) {
+void enviar(int i, struct sockaddr_in servidor) {
     //implementar función write() para enviar mensajes al resto de servidores.
-    printf("Se está enviando mensaje a la ip: %d\n", inet_aton(servidor.sin_addr.s_addr));
-    printf("El mensaje enviado es: %s\n", msg);
-}
-
-void difundir(char msg[]) {
-    printf("Se está difundiendo mensaje.\n");
-    int i = 0;
-    while (i<sizeof (servidores_dir)) {
-        enviar(servidores_dir[i], msg);
-        i++;
+    if(write(servidores_sock[i], &mensaje_recibido, sizeof(mensaje_recibido))<0){
+        perror("Error al enviar mensaje al difundir");
+    }else{
+        printf("Se está enviando mensaje a la ip: %d\n", inet_aton(servidor.sin_addr.s_addr));
+        printf("El mensaje enviado es: %s\n", mensaje_recibido.valor);
     }
 }
 
+void difundir(char* msg) {
+    printf("Se está difundiendo mensaje.\n");
+    mensaje_recibido.cont=contador_mensajes;
+    mensaje_recibido.valor=msg;
+    int i = 0;
+    while (i<sizeof (servidores_dir)) {
+        enviar(i, servidores_dir[i]);
+        i++;
+    }
+    contador_mensajes+=1;
+}
+
+void * recibir(void * a){
+    while(1){
+        read(sock_secundario, &mensaje_recibido, sizeof(mensaje_recibido));
+        if(chequearMensaje(mensaje_recibido)<0){
+            printf("El mensaje está en recibido\n");
+        }else{
+            printf("El mensaje se meterá en una cola fifo\n");
+            write(fifo, mensaje_recibido.valor, sizeof(mensaje_recibido.valor));
+        }
+    }
+}
+
+int chequearMensaje(struct mensaje msg){
+    /*for(){
+    
+    }*/
+    return -1;
+}
 /*
  * 'string' parametroko karaktere katea bilatzen du 'string_zerr' parametroan. 'string_zerr' bektoreko azkeneko elementua NULL izan behar da.
  * 'string' katearen lehen agerpenaren indizea itzuliko du, edo balio negatibo bat ez bada agerpenik aurkitu.
