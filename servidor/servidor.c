@@ -175,7 +175,10 @@ void establecerSecundario() {
     
     mkfifo(itoa(puerto), 0666);
     fifo = fopen(itoa(puerto), "r+");
-
+    
+    int ultimos_recibidos[10]; //aqui guardaremos los identificadores de los ultimos 10 mensajes recibidos
+    int mensajes_totales = 0;  //este es un contador de mensajes total, su funcion es servir para calcular cuando tienen que 
+    
     //se debe establecer un thread para recibir actualizaciones de lista de servidores
 
     if ((sock_secundario = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -646,14 +649,21 @@ void * recibir(void * a){
         }else{
             printf("El mensaje se meterá en una cola fifo\n");
             write(fifo, mensaje_recibido.valor, sizeof(mensaje_recibido.valor));
+            
+            //añadimos el identificador del mensaje recibido a la lista de los ultimos 10 recibidos.
+            ultimos_recibidos[mensajes_recibidos] = mensaje_recibido.cont;
+            mensajes_recibidos = (mensajes_recibidos+1)%10; //aplicamos el modulo para que siempre tenga un valor entre 0 y 9
         }
     }
 }
 
 int chequearMensaje(struct mensaje msg){
-    /*for(){
-    
-    }*/
+    int aux;
+    for(aux = 0; aux < 10; aux++){
+         if (msg.cont = ultimos_recibidos[aux]){
+         	return 0;
+         }
+    }
     return -1;
 }
 /*
