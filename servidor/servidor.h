@@ -54,10 +54,11 @@ void *establecerSocketServidores(void *a);
 void *establecerSocketClientes (void *a);
 int chequearMensaje(struct mensaje);
 void enviar(int, struct sockaddr_in);
-void r_difundir(int []);
+void difundir(char*);
 void * recibir(void *a);
 void * r_entregar(void *a);
-void actualizarListaServidores(struct sockaddr_in, int);
+void join(struct sockaddr_in, int);
+void leave(struct sockaddr_in, int);
 void enviarListaDeServidores();
 void * recibirListaDeServidores(void *a);
 

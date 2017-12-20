@@ -25,8 +25,11 @@ int servidores_sock[3];
 int contador_mensajes;
 
 int fifo;
+char * myfifo;
 
 struct mensaje mensaje_recibido;
+int ultimos_recibidos[10];
+int mensajes_recibidos;
 
 pthread_t tserv, tcli, tsec;
 char ip[INET_ADDRSTRLEN];
@@ -36,8 +39,8 @@ int main(int argc, char *argv[]) {
 
     primario = 0;
     contador_servidores = 0;
-    contador_mensajes=0;
- 
+    contador_mensajes = 1;
+
     if (argc == 1) {
         printf("Estableciendo servidor primario.\n");
         primario = 1;
@@ -89,7 +92,6 @@ void establecerParteComun() {
     }
     //inicializar todos los sockets con 0s
     memset(&servidor_dir, 0, sizeof (servidor_dir));
-
 
     servidor_dir.sin_family = AF_INET;
     servidor_dir.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -172,13 +174,21 @@ void establecerPrimario() {
 void establecerSecundario() {
     /*ESTO ES PARTE DE LA DE LOS SERVIDORES SECUNDARIOS*/
     /**/
-    
+
+    mensajes_recibidos=0;
+    ultimos_recibidos[0]=0;
+    //printf("%s", itoa(puerto));
+    myfifo= itoa(puerto);
+    /*
     mkfifo(itoa(puerto), 0666);
     fifo = fopen(itoa(puerto), "r+");
+     */
+    mkfifo(myfifo, 0666);
+    fifo = fopen(myfifo, "r+");
     
     int ultimos_recibidos[10]; //aqui guardaremos los identificadores de los ultimos 10 mensajes recibidos
-    int mensajes_totales = 0;  //este es un contador de mensajes total, su funcion es servir para calcular cuando tienen que 
-    
+    int mensajes_totales = 0; //este es un contador de mensajes total, su funcion es servir para calcular cuando tienen que 
+
     //se debe establecer un thread para recibir actualizaciones de lista de servidores
 
     if ((sock_secundario = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -248,10 +258,11 @@ void * establecerSocketServidores(void * a) {
             exit(1);
         }
 
-        actualizarListaServidores(nuevosecundario_dir, sock_comunicacion);
+        join(nuevosecundario_dir, sock_comunicacion);
+        enviarListaDeServidores();
 
         // Crear procesos hijo para conectar con otros servidores
-        switch (fork()) {
+        /*switch (fork()) {
             case 0:
                 close(sock_servidores);
                 enviarListaDeServidores();
@@ -266,11 +277,11 @@ void * establecerSocketServidores(void * a) {
                 break;
             default:
                 close(sock_comunicacion);
-        }
+        }*/
     }
 }
 
-void actualizarListaServidores(struct sockaddr_in dir, int sock) {
+void join(struct sockaddr_in dir, int sock) {
     printf("Se está actualizando la lista de servidores\n");
     servidores_dir[contador_servidores] = dir;
     servidores_sock[contador_servidores] = sock;
@@ -283,6 +294,28 @@ void actualizarListaServidores(struct sockaddr_in dir, int sock) {
         printf("    Direccion IP del servidor %d: %s:%d\n", i, ip, ntohs(servidores_dir[i].sin_port));
         printf("    Identificador del socket de %s: %d\n", ip, servidores_sock[i]);
     }
+}
+
+void leave(struct sockaddr_in dir, int sock) {
+    printf("Se está actualizando la lista de servidores\n");
+    int i = 0;
+    int found = 0;
+    for (i = 0; i < contador_servidores; i++) {
+        if (found == 0) {
+            if ((sock_addr_cmp_addr(servidores_dir[i], dir)== 0) && (sock_addr_cmp_port(servidores_dir[i], dir) == 0)) {
+                printf("Elimnando secundario de la lista\n");
+                servidores_dir[i] = servidores_dir[i + 1];
+                servidores_sock[i] = servidores_sock[i + 1];
+                found = 1;
+            }
+        } else {
+            printf("Recolocando elementos del array\n");
+            servidores_dir[i] = servidores_dir[i + 1];
+            servidores_sock[i] = servidores_sock[i + 1];
+        }
+    }
+    contador_servidores -= 1;
+    printf("Contador servidores: %d\n", contador_servidores);
 }
 
 void enviarListaDeServidores() {
@@ -347,7 +380,7 @@ void sesioa(int s) {
                 return;
         } else {
             //leer desde secundario mediante colas fifo.
-            
+
         }
 
 
@@ -578,10 +611,7 @@ void sesioa(int s) {
  */
 
 
-int  readline(int stream, char *buf, int tam) {
-    /*
-            Kontuz! Inplementazio hau sinplea da, baina ez da batere eraginkorra.
-     */
+int readline(int stream, char *buf, int tam) {
     char c;
     int guztira = 0;
     int cr = 0;
@@ -597,11 +627,10 @@ int  readline(int stream, char *buf, int tam) {
         if (n < 0)
             return -3;
         buf[guztira++] = c;
-        if (cr && c == '\n'){
-            difundir(buf);
+        if (cr && c == '\n') {
+            difundir(buf); //implementamos difusion fiable
             return guztira;
         }
-            
         else if (c == '\r')
             cr = 1;
         else
@@ -610,20 +639,21 @@ int  readline(int stream, char *buf, int tam) {
     return -2;
 }
 
-void * r_entregar(void *) {
+void * r_entregar(void * a) {
     //entregar mensaje a la aplicaciónç
     //mkfifo("FIFOrecibir", 0666); //crear antes, un unico fifo
     //int fd = open("FIFOrecibir");
-    printf("Se está entregando mensaje %s\n", msg);
+    
     read(fifo, mensaje_recibido.valor, sizeof(mensaje_recibido.valor));
+    printf("Se está entregando mensaje %s\n", mensaje_recibido.valor);
     //llamar a funcion sesion
 }
 
 void enviar(int i, struct sockaddr_in servidor) {
     //implementar función write() para enviar mensajes al resto de servidores.
-    if(write(servidores_sock[i], &mensaje_recibido, sizeof(mensaje_recibido))<0){
+    if (write(servidores_sock[i], &mensaje_recibido, sizeof (mensaje_recibido)) < 0) {
         perror("Error al enviar mensaje al difundir");
-    }else{
+    } else {
         printf("Se está enviando mensaje a la ip: %d\n", inet_aton(servidor.sin_addr.s_addr));
         printf("El mensaje enviado es: %s\n", mensaje_recibido.valor);
     }
@@ -631,41 +661,42 @@ void enviar(int i, struct sockaddr_in servidor) {
 
 void difundir(char* msg) {
     printf("Se está difundiendo mensaje.\n");
-    mensaje_recibido.cont=contador_mensajes;
-    mensaje_recibido.valor=msg;
+    mensaje_recibido.cont = contador_mensajes;
+    mensaje_recibido.valor = msg;
     int i = 0;
     while (i<sizeof (servidores_dir)) {
         enviar(i, servidores_dir[i]);
         i++;
     }
-    contador_mensajes+=1;
+    contador_mensajes += 1;
 }
 
-void * recibir(void * a){
-    while(1){
-        read(sock_secundario, &mensaje_recibido, sizeof(mensaje_recibido));
-        if(chequearMensaje(mensaje_recibido)<0){
+void * recibir(void * a) {
+    while (1) {
+        read(sock_secundario, &mensaje_recibido, sizeof (mensaje_recibido));
+        if (chequearMensaje(mensaje_recibido) < 0) {
             printf("El mensaje está en recibido\n");
-        }else{
+        } else {
             printf("El mensaje se meterá en una cola fifo\n");
-            write(fifo, mensaje_recibido.valor, sizeof(mensaje_recibido.valor));
-            
+            write(fifo, mensaje_recibido.valor, sizeof (mensaje_recibido.valor));
+
             //añadimos el identificador del mensaje recibido a la lista de los ultimos 10 recibidos.
+            mensajes_recibidos = (mensajes_recibidos + 1) % 10; //aplicamos el modulo para que siempre tenga un valor entre 0 y 9
             ultimos_recibidos[mensajes_recibidos] = mensaje_recibido.cont;
-            mensajes_recibidos = (mensajes_recibidos+1)%10; //aplicamos el modulo para que siempre tenga un valor entre 0 y 9
         }
     }
 }
 
-int chequearMensaje(struct mensaje msg){
+int chequearMensaje(struct mensaje msg) {
     int aux;
-    for(aux = 0; aux < 10; aux++){
-         if (msg.cont = ultimos_recibidos[aux]){
-         	return 0;
-         }
+    for (aux = 0; aux < 10; aux++) {
+        if (msg.cont = ultimos_recibidos[aux]) {
+            return 0;
+        }
     }
     return -1;
 }
+
 /*
  * 'string' parametroko karaktere katea bilatzen du 'string_zerr' parametroan. 'string_zerr' bektoreko azkeneko elementua NULL izan behar da.
  * 'string' katearen lehen agerpenaren indizea itzuliko du, edo balio negatibo bat ez bada agerpenik aurkitu.
@@ -758,4 +789,28 @@ int ez_ezkutua(const struct dirent *entry) {
         return (1);
 }
 
+/* comparador de direcciones */
 
+int sock_addr_cmp_addr(const struct sockaddr_in sa, const struct sockaddr_in sb) {
+    if (sa.sin_family != sb.sin_family)
+        return (sa.sin_family - sb.sin_family);
+
+    if (sa.sin_family == AF_INET) {
+        return (inet_pton(sa.sin_addr) - inet_pton(sb.sin_addr));
+    } else {
+        msg_panic("Esta familia no está soportada: %d", sa.sin_family);
+    }
+}
+
+/* comparador de puertos */
+
+int sock_addr_cmp_port(const struct sockaddr * sa, const struct sockaddr * sb) {
+    if (sa->sa_family != sb->sa_family)
+        return (sa->sa_family - sb->sa_family);
+
+    if (sa->sa_family == AF_INET) {
+        return (SOCK_ADDR_IN_PORT(sa) - SOCK_ADDR_IN_PORT(sb));
+    } else {
+        msg_panic("Esta familia no está soportada: %d", sa->sa_family);
+    }
+}
