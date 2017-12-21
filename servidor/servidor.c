@@ -4,6 +4,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include <unistd.h>
 #include <sys/wait.h>
 #include <signal.h>
@@ -12,6 +13,11 @@
 #include <sys/statvfs.h>
 #include <pthread.h>
 #include <time.h>
+
+//open
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #include "servidor.h"
 
@@ -25,7 +31,7 @@ int servidores_sock[3];
 int contador_mensajes;
 
 int fifo;
-char * myfifo;
+char myfifo[10];
 
 struct mensaje mensaje_recibido;
 int ultimos_recibidos[10];
@@ -175,17 +181,18 @@ void establecerSecundario() {
     /*ESTO ES PARTE DE LA DE LOS SERVIDORES SECUNDARIOS*/
     /**/
 
-    mensajes_recibidos=0;
-    ultimos_recibidos[0]=0;
+    mensajes_recibidos = 0;
+    ultimos_recibidos[0] = 0;
     //printf("%s", itoa(puerto));
-    myfifo= itoa(puerto);
+    //myfifo= itoa(puerto);
+    sprintf(myfifo, "%d", puerto);
     /*
     mkfifo(itoa(puerto), 0666);
     fifo = fopen(itoa(puerto), "r+");
      */
     mkfifo(myfifo, 0666);
-    fifo = fopen(myfifo, "r+");
-    
+    fifo = open(myfifo, 0666);
+
     int ultimos_recibidos[10]; //aqui guardaremos los identificadores de los ultimos 10 mensajes recibidos
     int mensajes_totales = 0; //este es un contador de mensajes total, su funcion es servir para calcular cuando tienen que 
 
@@ -302,7 +309,7 @@ void leave(struct sockaddr_in dir, int sock) {
     int found = 0;
     for (i = 0; i < contador_servidores; i++) {
         if (found == 0) {
-            if ((sock_addr_cmp_addr(servidores_dir[i], dir)== 0) && (sock_addr_cmp_port(servidores_dir[i], dir) == 0)) {
+            if ((sock_addr_cmp_addr(servidores_dir[i], dir) == 0) && (sock_addr_cmp_port(servidores_dir[i], dir) == 0)) {
                 printf("Elimnando secundario de la lista\n");
                 servidores_dir[i] = servidores_dir[i + 1];
                 servidores_sock[i] = servidores_sock[i + 1];
@@ -630,8 +637,7 @@ int readline(int stream, char *buf, int tam) {
         if (cr && c == '\n') {
             difundir(buf); //implementamos difusion fiable
             return guztira;
-        }
-        else if (c == '\r')
+        } else if (c == '\r')
             cr = 1;
         else
             cr = 0;
@@ -643,8 +649,8 @@ void * r_entregar(void * a) {
     //entregar mensaje a la aplicaciónç
     //mkfifo("FIFOrecibir", 0666); //crear antes, un unico fifo
     //int fd = open("FIFOrecibir");
-    
-    read(fifo, mensaje_recibido.valor, sizeof(mensaje_recibido.valor));
+
+    read(fifo, mensaje_recibido.valor, sizeof (mensaje_recibido.valor));
     printf("Se está entregando mensaje %s\n", mensaje_recibido.valor);
     //llamar a funcion sesion
 }
