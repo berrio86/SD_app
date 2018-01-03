@@ -22,13 +22,13 @@
 #include "servidor.h"
 
 
-int sock_clientes, elkarrizketa, sock_servidores, sock_comunicacion, sock_secundario;
+struct servidor servidores[3], servidores_helper[3];
+int sock_clientes, elkarrizketa, sock_servidores, sock_secundario;
+int  sock_comunicacion[3]; // cada servidor tendra su array para guardar los sockets de comunicacion con otros servidores
 struct sockaddr_in servidor_dir, primario_dir, clientes_dir, nuevosecundario_dir;
+
 socklen_t helb_tam, nuevosecundario_size;
 int primario, puerto, contador_servidores;
-struct sockaddr_in servidores_dir[3], servidores_helper[3];
-int servidores_sock[3];
-int contador_mensajes;
 
 int fifo;
 char myfifo[10];
@@ -36,6 +36,7 @@ char myfifo[10];
 struct mensaje mensaje_recibido;
 int ultimos_recibidos[10];
 int mensajes_recibidos;
+int contador_mensajes;
 
 pthread_t tserv, tcli, tsec;
 char ip[INET_ADDRSTRLEN];
@@ -52,8 +53,18 @@ int main(int argc, char *argv[]) {
         primario = 1;
         puerto = PORT_SERVIDORES;
     } else if (argc == 2) {
+        //Para establecer servidores secundarios en el mismo ordenador
+        printf("Estableciendo servidor secundario en el mismo ordenador.\n");
+        primario = 0;
+        puerto = atoi(argv[1]);
+        memset(&primario_dir, 0, sizeof (primario_dir));
+        primario_dir.sin_family = AF_INET;
+        primario_dir.sin_addr.s_addr = htonl(INADDR_ANY);
+        primario_dir.sin_port = htons(PORT_SERVIDORES);
+
+    } else if (argc == 4) {
         //Para establecer servidores secundarios en diferentes ordenadores
-        printf("Estableciendo servidor secundario.\n");
+        printf("Estableciendo servidor secundario en ordenador lejano.\n");
         primario = 0;
         memset(&primario_dir, 0, sizeof (primario_dir));
         primario_dir.sin_family = AF_INET;
@@ -62,21 +73,11 @@ int main(int argc, char *argv[]) {
         puerto = PORT_SERVIDORES;
         //servidores[0]=primario_dir;
 
-    } else if (argc == 3) {
-        //Para establecer servidores secundarios en el mismo ordenadores
-        printf("Estableciendo servidor secundario.\n");
-        primario = 0;
-        puerto = atoi(argv[2]);
-        memset(&primario_dir, 0, sizeof (primario_dir));
-        primario_dir.sin_family = AF_INET;
-        primario_dir.sin_addr.s_addr = htonl(INADDR_ANY);
-        primario_dir.sin_port = htons(PORT_SERVIDORES);
-
     } else {
         printf("Error: El número de parámetros es incorrecto!.\n");
         printf("- Primario (0 parámetros)\n");
-        printf("- Secundario(1 parámetros): IP primario \n");
-        printf("- Secundario(2 parámetros): cualquierCosa + puerto de secundario \n");
+        printf("- Secundario en el mismo ordenador(1 parámetros): puerto \n");
+        printf("- Secundario en diferentes ordenadores(3 parámetros): IP primario + IP secundario + Puerto de secundario \n");
         exit(1);
     }
 
@@ -193,8 +194,8 @@ void establecerSecundario() {
     mkfifo(myfifo, 0666);
     fifo = open(myfifo, 0666);
 
-    int ultimos_recibidos[10]; //aqui guardaremos los identificadores de los ultimos 10 mensajes recibidos
-    int mensajes_totales = 0; //este es un contador de mensajes total, su funcion es servir para calcular cuando tienen que 
+    //int ultimos_recibidos[10]; //aqui guardaremos los identificadores de los ultimos 10 mensajes recibidos
+    //int mensajes_totales = 0; //este es un contador de mensajes total, su funcion es servir para calcular cuando tienen que 
 
     //se debe establecer un thread para recibir actualizaciones de lista de servidores
 
@@ -211,7 +212,7 @@ void establecerSecundario() {
     }
 
     if (pthread_create(&tsec, NULL, recibirListaDeServidores, NULL)) {
-        perror("Error al crear thread de clientes");
+        perror("Error al crear thread de recepcion de lista de servidores");
         exit(1);
     }
 
@@ -260,12 +261,12 @@ void * establecerSocketServidores(void * a) {
     while (1) {
         // Onartu konexio eskaera eta sortu elkarrizketa socketa.
         // Aceptar petición de conexión y crear socket
-        if ((sock_comunicacion = accept(sock_servidores, (struct sockaddr *) &nuevosecundario_dir, &nuevosecundario_size)) < 0) {
+        if ((sock_comunicacion[contador_servidores] = accept(sock_servidores, (struct sockaddr *) &nuevosecundario_dir, &nuevosecundario_size)) < 0) {
             perror("Error al conectarse");
             exit(1);
         }
 
-        join(nuevosecundario_dir, sock_comunicacion);
+        join(nuevosecundario_dir);
         enviarListaDeServidores();
 
         // Crear procesos hijo para conectar con otros servidores
@@ -288,37 +289,37 @@ void * establecerSocketServidores(void * a) {
     }
 }
 
-void join(struct sockaddr_in dir, int sock) {
+void join(struct sockaddr_in dir) {
     printf("Se está actualizando la lista de servidores\n");
-    servidores_dir[contador_servidores] = dir;
-    servidores_sock[contador_servidores] = sock;
+    servidores[contador_servidores].id = contador_servidores;
+    servidores[contador_servidores].dir = dir;
     contador_servidores += 1;
     printf("Contador servidores: %d\n", contador_servidores);
     int i;
     //int size = sizeof (servidores) / sizeof (struct sockaddr_in);
     for (i = 0; i < contador_servidores; i++) {
-        inet_ntop(AF_INET, &(servidores_dir[i].sin_addr), ip, INET_ADDRSTRLEN);
-        printf("    Direccion IP del servidor %d: %s:%d\n", i, ip, ntohs(servidores_dir[i].sin_port));
-        printf("    Identificador del socket de %s: %d\n", ip, servidores_sock[i]);
+        inet_ntop(AF_INET, &(servidores[i].dir.sin_addr), ip, INET_ADDRSTRLEN);
+        printf("    Direccion IP del servidor %d: %s:%d\n", i, ip, ntohs(servidores[i].dir.sin_port));
+        printf("    Identificador del socket de %s: %d\n", ip, sock_comunicacion[i]);
     }
 }
 
-void leave(struct sockaddr_in dir, int sock) {
+void leave(int id, struct sockaddr_in dir) {
     printf("Se está actualizando la lista de servidores\n");
     int i = 0;
     int found = 0;
     for (i = 0; i < contador_servidores; i++) {
         if (found == 0) {
-            if ((sock_addr_cmp_addr(servidores_dir[i], dir) == 0) && (sock_addr_cmp_port(servidores_dir[i], dir) == 0)) {
+            if (servidores[i].id == id) {
                 printf("Elimnando secundario de la lista\n");
-                servidores_dir[i] = servidores_dir[i + 1];
-                servidores_sock[i] = servidores_sock[i + 1];
+                servidores[i] = servidores[i + 1];
+                sock_comunicacion[i] = sock_comunicacion[i + 1];
                 found = 1;
             }
         } else {
             printf("Recolocando elementos del array\n");
-            servidores_dir[i] = servidores_dir[i + 1];
-            servidores_sock[i] = servidores_sock[i + 1];
+            servidores[i] = servidores[i + 1];
+            sock_comunicacion[i] = sock_comunicacion[i + 1];
         }
     }
     contador_servidores -= 1;
@@ -330,7 +331,7 @@ void enviarListaDeServidores() {
     int i = 0;
     //int size = sizeof (servidores) / sizeof (struct sockaddr_in);
     for (i = 0; i < contador_servidores; i++) {
-        if (write(servidores_sock[i], &servidores_dir, sizeof (servidores_dir)) < 0) {
+        if (write(sock_comunicacion[i], &servidores, sizeof (servidores)) < 0) {
             perror("    Error al enviar la lista de servidores");
         } else {
             printf("    Enviando lista a servidor numero %d\n", i);
@@ -352,11 +353,11 @@ void * recibirListaDeServidores(void * a) {
             } else {
                 //servidores = *servidores_helper;
                 int i;
-                int size = sizeof (servidores_dir) / sizeof (struct sockaddr_in);
+                int size = sizeof (servidores) / sizeof (struct sockaddr_in);
                 for (i = 0; i < size; i++) {
-                    servidores_dir[i] = servidores_helper[i];
-                    inet_ntop(AF_INET, &(servidores_dir[i].sin_addr), ip, INET_ADDRSTRLEN);
-                    printf("Direccion IP del servidor %d: %s:%d\n", i, ip, ntohs(servidores_dir[i].sin_port));
+                    servidores[i].dir = servidores_helper[i].dir;
+                    inet_ntop(AF_INET, &(servidores[i].dir.sin_addr), ip, INET_ADDRSTRLEN);
+                    printf("Direccion IP del servidor %d: %s:%d\n", i, ip, ntohs(servidores[i].dir.sin_port));
                 }
                 printf("Lista de sockets nuevo recibida y actualizada\n");
             }
@@ -650,18 +651,20 @@ void * r_entregar(void * a) {
     //mkfifo("FIFOrecibir", 0666); //crear antes, un unico fifo
     //int fd = open("FIFOrecibir");
 
-    read(fifo, mensaje_recibido.valor, sizeof (mensaje_recibido.valor));
-    printf("Se está entregando mensaje %s\n", mensaje_recibido.valor);
+    read(fifo, &mensaje_recibido.valor, sizeof (mensaje_recibido.valor));
+    printf("Se está entregando mensaje %d\n", mensaje_recibido.valor);
     //llamar a funcion sesion
 }
 
 void enviar(int i, struct sockaddr_in servidor) {
     //implementar función write() para enviar mensajes al resto de servidores.
-    if (write(servidores_sock[i], &mensaje_recibido, sizeof (mensaje_recibido)) < 0) {
+    if (write(sock_comunicacion[i], &mensaje_recibido, sizeof (mensaje_recibido)) < 0) {
         perror("Error al enviar mensaje al difundir");
     } else {
-        printf("Se está enviando mensaje a la ip: %d\n", inet_aton(servidor.sin_addr.s_addr));
-        printf("El mensaje enviado es: %s\n", mensaje_recibido.valor);
+        //MIRAR WARNING DE TIPOS
+        //printf("Se está enviando mensaje a la ip: %d\n", inet_aton(servidor.sin_addr.s_addr));
+        printf("Se está enviando mensaje.\n");
+        printf("El mensaje enviado es: %d\n", mensaje_recibido.valor);
     }
 }
 
@@ -670,8 +673,8 @@ void difundir(char* msg) {
     mensaje_recibido.cont = contador_mensajes;
     mensaje_recibido.valor = msg;
     int i = 0;
-    while (i<sizeof (servidores_dir)) {
-        enviar(i, servidores_dir[i]);
+    while (i<sizeof (servidores)) {
+        enviar(i, servidores[i].dir);
         i++;
     }
     contador_mensajes += 1;
@@ -684,7 +687,7 @@ void * recibir(void * a) {
             printf("El mensaje está en recibido\n");
         } else {
             printf("El mensaje se meterá en una cola fifo\n");
-            write(fifo, mensaje_recibido.valor, sizeof (mensaje_recibido.valor));
+            write(fifo, &mensaje_recibido.valor, sizeof (mensaje_recibido.valor));
 
             //añadimos el identificador del mensaje recibido a la lista de los ultimos 10 recibidos.
             mensajes_recibidos = (mensajes_recibidos + 1) % 10; //aplicamos el modulo para que siempre tenga un valor entre 0 y 9
@@ -797,20 +800,29 @@ int ez_ezkutua(const struct dirent *entry) {
 
 /* comparador de direcciones */
 
-int sock_addr_cmp_addr(const struct sockaddr_in sa, const struct sockaddr_in sb) {
-    if (sa.sin_family != sb.sin_family)
-        return (sa.sin_family - sb.sin_family);
+/*
+int     sock_addr_cmp_addr(const struct sockaddr * sa, const struct sockaddr * sb)
+{
+    if (sa->sa_family != sb->sa_family)
+	return (sa->sa_family - sb->sa_family);
 
-    if (sa.sin_family == AF_INET) {
-        return (inet_pton(sa.sin_addr) - inet_pton(sb.sin_addr));
+    if (sa->sa_family == AF_INET) {
+	return (SOCK_ADDR_IN_ADDR(sa).s_addr - SOCK_ADDR_IN_ADDR(sb).s_addr);
+#ifdef HAS_IPV6
+    } else if (sa->sa_family == AF_INET6) {
+	return (memcmp((char *) &(SOCK_ADDR_IN6_ADDR(sa)),
+		       (char *) &(SOCK_ADDR_IN6_ADDR(sb)),
+		       sizeof(SOCK_ADDR_IN6_ADDR(sa))));
+#endif
     } else {
-        msg_panic("Esta familia no está soportada: %d", sa.sin_family);
+	msg_panic("sock_addr_cmp_addr: unsupported address family %d",
+		  sa->sa_family);
     }
 }
-
+*/
 /* comparador de puertos */
-
-int sock_addr_cmp_port(const struct sockaddr * sa, const struct sockaddr * sb) {
+/*
+int sock_addr_cmp_port(struct sockaddr * sa, struct sockaddr * sb) {
     if (sa->sa_family != sb->sa_family)
         return (sa->sa_family - sb->sa_family);
 
@@ -820,3 +832,38 @@ int sock_addr_cmp_port(const struct sockaddr * sa, const struct sockaddr * sb) {
         msg_panic("Esta familia no está soportada: %d", sa->sa_family);
     }
 }
+
+
+//int sockaddr_cmp(struct sockaddr *x, struct sockaddr *y)
+int sock_addr_cmp_addr(struct sockaddr *x, struct sockaddr *y)
+{
+#define CMP(a, b) if (a != b) return a < b ? -1 : 1
+
+    CMP(x->sa_family, y->sa_family);
+
+    if (x->sa_family == AF_UNIX) {
+        struct sockaddr_un *xun = (void*)x, *yun = (void*)y;
+        int r = strcmp(xun->sun_path, yun->sun_path);
+        if (r != 0)
+            return r;
+    } else if (x->sa_family == AF_INET) {
+        struct sockaddr_in *xin = (void*)x, *yin = (void*)y;
+        CMP(ntohl(xin->sin_addr.s_addr), ntohl(yin->sin_addr.s_addr));
+        CMP(ntohs(xin->sin_port), ntohs(yin->sin_port));
+    } else if (x->sa_family == AF_INET6) {
+        struct sockaddr_in6 *xin6 = (void*)x, *yin6 = (void*)y;
+        int r = memcmp(xin6->sin6_addr.s6_addr, yin6->sin6_addr.s6_addr, sizeof(xin6->sin6_addr.s6_addr));
+        if (r != 0)
+            return r;
+        CMP(ntohs(xin6->sin6_port), ntohs(yin6->sin6_port));
+        CMP(xin6->sin6_flowinfo, yin6->sin6_flowinfo);
+        CMP(xin6->sin6_scope_id, yin6->sin6_scope_id);
+    } else {
+        assert(!"unknown sa_family");
+    }
+
+#undef CMP
+    return 0;
+}
+
+*/

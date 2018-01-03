@@ -1,3 +1,5 @@
+
+
 #define MAX_BUF 1024
 #define PORT 6012
 #define PORT_SERVIDORES 6013
@@ -31,7 +33,12 @@ int egoera;
 
 struct mensaje {
     int cont;
-    char valor[];
+    char valor;
+};
+
+struct servidor {
+    int id;
+    struct sockaddr_in dir;
 };
 
 void sesioa(int s);
@@ -57,8 +64,11 @@ void enviar(int, struct sockaddr_in);
 void difundir(char*);
 void * recibir(void *a);
 void * r_entregar(void *a);
-void join(struct sockaddr_in, int);
-void leave(struct sockaddr_in, int);
+void join(struct sockaddr_in);
+void leave(int, struct sockaddr_in);
 void enviarListaDeServidores();
 void * recibirListaDeServidores(void *a);
+
+//int sock_addr_cmp_port(struct sockaddr *, struct sockaddr *);
+//int sock_addr_cmp_addr(struct sockaddr *, struct sockaddr *);
 
