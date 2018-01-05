@@ -22,9 +22,9 @@
 #include "servidor.h"
 
 
-struct servidor servidores[3], servidores_helper[3];
-int sock_clientes, elkarrizketa, sock_servidores, sock_secundario;
-int  sock_comunicacion[3]; // cada servidor tendra su array para guardar los sockets de comunicacion con otros servidores
+struct servidor servidores[3];
+int sock_clientes, elkarrizketa, sock_servidores, sock_secundario, nuevo_secundario;
+int sock_comunicacion[3]; // cada servidor tendra su array para guardar los sockets de comunicacion con otros servidores
 struct sockaddr_in servidor_dir, primario_dir, clientes_dir, nuevosecundario_dir;
 
 socklen_t helb_tam, nuevosecundario_size;
@@ -47,6 +47,7 @@ int main(int argc, char *argv[]) {
     primario = 0;
     contador_servidores = 0;
     contador_mensajes = 1;
+    nuevo_secundario = 0;
 
     if (argc == 1) {
         printf("Estableciendo servidor primario.\n");
@@ -129,10 +130,12 @@ void establecerParteComun() {
         exit(1);
     }
 
-    /*if (pthread_join(tserv, NULL)) {
+    /*
+    if (pthread_join(tserv, NULL)) {
         printf("\n ERROR joining thread");
         exit(1);
-    }*/
+    }
+     */
 }
 
 void establecerPrimario() {
@@ -161,7 +164,6 @@ void establecerPrimario() {
         exit(1);
     }
 
-
     if (pthread_create(&tcli, NULL, establecerSocketClientes, NULL)) {
         perror("Error al crear thread de clientes");
         exit(1);
@@ -172,32 +174,16 @@ void establecerPrimario() {
         exit(1);
     }
 
-
-
-
-
 }
 
 void establecerSecundario() {
     /*ESTO ES PARTE DE LA DE LOS SERVIDORES SECUNDARIOS*/
-    /**/
 
     mensajes_recibidos = 0;
     ultimos_recibidos[0] = 0;
-    //printf("%s", itoa(puerto));
-    //myfifo= itoa(puerto);
     sprintf(myfifo, "%d", puerto);
-    /*
-    mkfifo(itoa(puerto), 0666);
-    fifo = fopen(itoa(puerto), "r+");
-     */
     mkfifo(myfifo, 0666);
     fifo = open(myfifo, 0666);
-
-    //int ultimos_recibidos[10]; //aqui guardaremos los identificadores de los ultimos 10 mensajes recibidos
-    //int mensajes_totales = 0; //este es un contador de mensajes total, su funcion es servir para calcular cuando tienen que 
-
-    //se debe establecer un thread para recibir actualizaciones de lista de servidores
 
     if ((sock_secundario = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         perror("Error al crear el socket de secundarios");
@@ -216,15 +202,15 @@ void establecerSecundario() {
         exit(1);
     }
 
-    /*
-    while (1) {
-        //establecer lo que tiene que hacer el secundario
-        readline(sock_secundario, buf, MAX_BUF);
+    if (write(sock_secundario, &puerto, sizeof (puerto)) < 0) {
+        perror("Error al enviar el puerto establecido en el secundario al servidor primario\n");
+        exit(1);
+    } else {
+        printf("El secundario ha enviado el puerto al primario con exito\n");
     }
-     */
 
     if (pthread_join(tsec, NULL)) {
-        printf("\n ERROR joining thread");
+        perror("\n ERROR joining thread \n");
         exit(1);
     }
 }
@@ -237,7 +223,7 @@ void * establecerSocketClientes(void * a) {
         // Onartu konexio eskaera eta sortu elkarrizketa socketa.
         // Aceptar petición de conexión y crear socket
         if ((elkarrizketa = accept(sock_clientes, NULL, NULL)) < 0) {
-            perror("Error al conectarse");
+            perror("    Error al conectarse");
             exit(1);
         }
 
@@ -258,45 +244,38 @@ void * establecerSocketServidores(void * a) {
     printf("El thread de socket de servidores funciona\n");
     // No se hara nada al recibir SIG_CHLD. De esta forma los prozesos hijo terminados, no se quedarán tipo zombie
     signal(SIGCHLD, SIG_IGN);
+    int puerto_helper;
+
     while (1) {
-        // Onartu konexio eskaera eta sortu elkarrizketa socketa.
         // Aceptar petición de conexión y crear socket
         if ((sock_comunicacion[contador_servidores] = accept(sock_servidores, (struct sockaddr *) &nuevosecundario_dir, &nuevosecundario_size)) < 0) {
-            perror("Error al conectarse");
+            perror("    Error al conectarse");
             exit(1);
         }
 
-        join(nuevosecundario_dir);
-        enviarListaDeServidores();
+        printf("    Conexion recibida.\n");
+        if (primario == 1) {
+            if (read(sock_comunicacion[contador_servidores], &puerto_helper, sizeof (puerto_helper)) < 0) {
+                perror("    Error al leer el puerto desde secundario");
+                exit(1);
+            } else {
+                printf("    El puerto de comunicacion que utiliza el servidor secundario %d, es el %d\n", contador_servidores, puerto_helper);
+            }
 
-        // Crear procesos hijo para conectar con otros servidores
-        /*switch (fork()) {
-            case 0:
-                close(sock_servidores);
-                enviarListaDeServidores();
-                //printf("Se ha cerrado el socket de escucha del servidor y se ha abierto una nueva\n");
-                // si el puerto se queda en una situacion inestable, utilizar fuser -k 6013/tcp en la terminal linux para cerrar el puerto. No deberia
-                //creo que esto se deberia de hacer lock y unlock
-
-                //hasta aqui
-                //parece ser que si no se cierra el socket, no funciona. No debería ser así porque son subprocesos...
-                //close(sock_comunicacion);
-                //exit(0);
-                break;
-            default:
-                close(sock_comunicacion);
-        }*/
+            join(nuevosecundario_dir, puerto_helper);
+            enviarListaDeServidores();
+        }
     }
 }
 
-void join(struct sockaddr_in dir) {
-    printf("Se está actualizando la lista de servidores\n");
+void join(struct sockaddr_in dir, int puerto_escucha) {
+    printf("\n**** Se está actualizando la lista de servidores: JOIN ****\n");
+    printf("    Contador servidores secundarios: %d\n", contador_servidores);
     servidores[contador_servidores].id = contador_servidores;
     servidores[contador_servidores].dir = dir;
+    servidores[contador_servidores].dir.sin_port = htons(puerto_escucha);
     contador_servidores += 1;
-    printf("Contador servidores: %d\n", contador_servidores);
     int i;
-    //int size = sizeof (servidores) / sizeof (struct sockaddr_in);
     for (i = 0; i < contador_servidores; i++) {
         inet_ntop(AF_INET, &(servidores[i].dir.sin_addr), ip, INET_ADDRSTRLEN);
         printf("    Direccion IP del servidor %d: %s:%d\n", i, ip, ntohs(servidores[i].dir.sin_port));
@@ -305,32 +284,38 @@ void join(struct sockaddr_in dir) {
 }
 
 void leave(int id, struct sockaddr_in dir) {
-    printf("Se está actualizando la lista de servidores\n");
+    printf("\n**** Se está actualizando la lista de servidores: LEAVE ****\n");
     int i = 0;
     int found = 0;
     for (i = 0; i < contador_servidores; i++) {
         if (found == 0) {
             if (servidores[i].id == id) {
-                printf("Elimnando secundario de la lista\n");
+                printf("    Elimnando secundario de la lista\n");
                 servidores[i] = servidores[i + 1];
                 sock_comunicacion[i] = sock_comunicacion[i + 1];
                 found = 1;
             }
         } else {
-            printf("Recolocando elementos del array\n");
+            printf("    Recolocando elementos del array\n");
             servidores[i] = servidores[i + 1];
             sock_comunicacion[i] = sock_comunicacion[i + 1];
         }
     }
     contador_servidores -= 1;
-    printf("Contador servidores: %d\n", contador_servidores);
+    printf("    Contador servidores secundarios: %d\n", contador_servidores);
 }
 
 void enviarListaDeServidores() {
-    printf("Se está enviando la lista de servidores\n");
+    printf("\n**** Se está enviando la lista de servidores ****\n");
     int i = 0;
     //int size = sizeof (servidores) / sizeof (struct sockaddr_in);
     for (i = 0; i < contador_servidores; i++) {
+        if (write(sock_comunicacion[i], &contador_servidores, sizeof (contador_servidores)) < 0) {
+            perror("    Error al enviar el contador de servidores");
+        } else {
+            printf("    Enviando contador de servidores a servidor numero %d\n", i);
+        }
+
         if (write(sock_comunicacion[i], &servidores, sizeof (servidores)) < 0) {
             perror("    Error al enviar la lista de servidores");
         } else {
@@ -340,26 +325,51 @@ void enviarListaDeServidores() {
 }
 
 void * recibirListaDeServidores(void * a) {
-    int x;
+    printf("\n**** Recibiendo lista de servidores ****\n");
+    struct servidor servidores_helper[3];
     while (1) {
         while (1) {
-            x = read(sock_secundario, &servidores_helper, sizeof (servidores_helper));
-            if (x < 0) {
-                perror("Error al recibir lista de servidores");
-            } else if (x == 0) {
-                printf("No hay bytes que leer, hay que cerrar el socket.\n");
-                close(sock_secundario);
-                break;
+
+            //recibir contador de servidores
+            if (read(sock_secundario, &contador_servidores, sizeof (contador_servidores)) < 0) {
+                perror("    Error al recibir contador de servidores");
             } else {
-                //servidores = *servidores_helper;
+                printf("    Contador de servidores recibida y actualizada: %d\n", contador_servidores);
+            }
+
+            //recibir lista de direcciones
+            if (read(sock_secundario, &servidores_helper, sizeof (servidores_helper)) < 0) {
+                perror("    Error al recibir lista de servidores");
+            } else {
                 int i;
-                int size = sizeof (servidores) / sizeof (struct sockaddr_in);
-                for (i = 0; i < size; i++) {
-                    servidores[i].dir = servidores_helper[i].dir;
+                //int size = sizeof (servidores) / sizeof (struct sockaddr_in);
+                for (i = 0; i < contador_servidores; i++) {
+                    servidores[i] = servidores_helper[i];
                     inet_ntop(AF_INET, &(servidores[i].dir.sin_addr), ip, INET_ADDRSTRLEN);
-                    printf("Direccion IP del servidor %d: %s:%d\n", i, ip, ntohs(servidores[i].dir.sin_port));
+                    printf("    Direccion IP del servidor %d: %s:%d\n", i, ip, ntohs(servidores[i].dir.sin_port));
                 }
-                printf("Lista de sockets nuevo recibida y actualizada\n");
+                printf("    Lista de direcciones nueva recibida y actualizada\n");
+            }
+
+            //si es el ultimo secundario en conectarse, hacer peticiones de conexion al resto de secundarios
+            if (nuevo_secundario == 0) {
+                int i;
+                for (i = 0; i < contador_servidores - 1; i++) {
+                    printf("    Haciendo peticiones de comunicacion a servidores secundarios\n");
+                    if ((sock_comunicacion[i] = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+                        perror("    Error al crear el socket de comunicacion entre secundarios");
+                        exit(1);
+                    }
+                    if (connect(sock_comunicacion[i], (struct sockaddr *) &servidores[i].dir, sizeof (servidores[i].dir)) < 0) {
+                        perror("    Error al conectarse con el servidor secundario");
+                        exit(1);
+                    } else {
+                        printf("    El servidor se ha conectado al secundario numero %d con exito\n", i);
+                    }
+
+
+                }
+                nuevo_secundario = 1;
             }
         }
     }
@@ -804,22 +814,22 @@ int ez_ezkutua(const struct dirent *entry) {
 int     sock_addr_cmp_addr(const struct sockaddr * sa, const struct sockaddr * sb)
 {
     if (sa->sa_family != sb->sa_family)
-	return (sa->sa_family - sb->sa_family);
+        return (sa->sa_family - sb->sa_family);
 
     if (sa->sa_family == AF_INET) {
-	return (SOCK_ADDR_IN_ADDR(sa).s_addr - SOCK_ADDR_IN_ADDR(sb).s_addr);
+        return (SOCK_ADDR_IN_ADDR(sa).s_addr - SOCK_ADDR_IN_ADDR(sb).s_addr);
 #ifdef HAS_IPV6
     } else if (sa->sa_family == AF_INET6) {
-	return (memcmp((char *) &(SOCK_ADDR_IN6_ADDR(sa)),
-		       (char *) &(SOCK_ADDR_IN6_ADDR(sb)),
-		       sizeof(SOCK_ADDR_IN6_ADDR(sa))));
+        return (memcmp((char *) &(SOCK_ADDR_IN6_ADDR(sa)),
+                       (char *) &(SOCK_ADDR_IN6_ADDR(sb)),
+                       sizeof(SOCK_ADDR_IN6_ADDR(sa))));
 #endif
     } else {
-	msg_panic("sock_addr_cmp_addr: unsupported address family %d",
-		  sa->sa_family);
+        msg_panic("sock_addr_cmp_addr: unsupported address family %d",
+                  sa->sa_family);
     }
 }
-*/
+ */
 /* comparador de puertos */
 /*
 int sock_addr_cmp_port(struct sockaddr * sa, struct sockaddr * sb) {
@@ -866,4 +876,4 @@ int sock_addr_cmp_addr(struct sockaddr *x, struct sockaddr *y)
     return 0;
 }
 
-*/
+ */
