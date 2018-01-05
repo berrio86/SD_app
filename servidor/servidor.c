@@ -130,12 +130,6 @@ void establecerParteComun() {
         exit(1);
     }
 
-    /*
-    if (pthread_join(tserv, NULL)) {
-        printf("\n ERROR joining thread");
-        exit(1);
-    }
-     */
 }
 
 void establecerPrimario() {
@@ -308,18 +302,17 @@ void leave(int id, struct sockaddr_in dir) {
 void enviarListaDeServidores() {
     printf("\n**** Se está enviando la lista de servidores ****\n");
     int i = 0;
-    //int size = sizeof (servidores) / sizeof (struct sockaddr_in);
     for (i = 0; i < contador_servidores; i++) {
         if (write(sock_comunicacion[i], &contador_servidores, sizeof (contador_servidores)) < 0) {
             perror("    Error al enviar el contador de servidores");
         } else {
-            printf("    Enviando contador de servidores a servidor numero %d\n", i);
+            printf("    Enviando contador de servidores a servidor número %d\n", i);
         }
 
         if (write(sock_comunicacion[i], &servidores, sizeof (servidores)) < 0) {
             perror("    Error al enviar la lista de servidores");
         } else {
-            printf("    Enviando lista a servidor numero %d\n", i);
+            printf("    Enviando lista a servidor número %d\n", i);
         }
     }
 }
@@ -342,7 +335,6 @@ void * recibirListaDeServidores(void * a) {
                 perror("    Error al recibir lista de servidores");
             } else {
                 int i;
-                //int size = sizeof (servidores) / sizeof (struct sockaddr_in);
                 for (i = 0; i < contador_servidores; i++) {
                     servidores[i] = servidores_helper[i];
                     inet_ntop(AF_INET, &(servidores[i].dir.sin_addr), ip, INET_ADDRSTRLEN);
@@ -366,8 +358,6 @@ void * recibirListaDeServidores(void * a) {
                     } else {
                         printf("    El servidor se ha conectado al secundario numero %d con exito\n", i);
                     }
-
-
                 }
                 nuevo_secundario = 1;
             }
@@ -398,7 +388,7 @@ void sesioa(int s) {
                 return;
         } else {
             //leer desde secundario mediante colas fifo.
-
+            
         }
 
 
@@ -657,29 +647,27 @@ int readline(int stream, char *buf, int tam) {
 }
 
 void * r_entregar(void * a) {
-    //entregar mensaje a la aplicaciónç
-    //mkfifo("FIFOrecibir", 0666); //crear antes, un unico fifo
-    //int fd = open("FIFOrecibir");
-
+    printf("\n**** R_entregando mensaje: R_ENTREGAR ****\n");
     read(fifo, &mensaje_recibido.valor, sizeof (mensaje_recibido.valor));
-    printf("Se está entregando mensaje %d\n", mensaje_recibido.valor);
+    printf("    Se está entregando mensaje %d\n", mensaje_recibido.valor);
+    
     //llamar a funcion sesion
 }
 
 void enviar(int i, struct sockaddr_in servidor) {
-    //implementar función write() para enviar mensajes al resto de servidores.
+    printf("\n**** Enviando mensaje: ENVIAR ****\n");
     if (write(sock_comunicacion[i], &mensaje_recibido, sizeof (mensaje_recibido)) < 0) {
-        perror("Error al enviar mensaje al difundir");
+        perror("    Error al enviar mensaje al difundir");
     } else {
         //MIRAR WARNING DE TIPOS
         //printf("Se está enviando mensaje a la ip: %d\n", inet_aton(servidor.sin_addr.s_addr));
-        printf("Se está enviando mensaje.\n");
-        printf("El mensaje enviado es: %d\n", mensaje_recibido.valor);
+        printf("    Se está enviando mensaje.\n");
+        printf("    El mensaje enviado es: %d\n", mensaje_recibido.valor);
     }
 }
 
 void difundir(char* msg) {
-    printf("Se está difundiendo mensaje.\n");
+    printf("\n**** Difundiendo mensaje: DIFUNDIR ****\n");
     mensaje_recibido.cont = contador_mensajes;
     mensaje_recibido.valor = msg;
     int i = 0;
@@ -692,11 +680,12 @@ void difundir(char* msg) {
 
 void * recibir(void * a) {
     while (1) {
+        printf("\n**** Recibiendo mensaje: RECIBIR ****\n");
         read(sock_secundario, &mensaje_recibido, sizeof (mensaje_recibido));
         if (chequearMensaje(mensaje_recibido) < 0) {
-            printf("El mensaje está en recibido\n");
+            printf("    El mensaje %d está en la lista de mensajes recibidos \n", mensaje_recibido.cont);
         } else {
-            printf("El mensaje se meterá en una cola fifo\n");
+            printf("    El mensaje %d se meterá en una cola fifo \n", mensaje_recibido.cont);
             write(fifo, &mensaje_recibido.valor, sizeof (mensaje_recibido.valor));
 
             //añadimos el identificador del mensaje recibido a la lista de los ultimos 10 recibidos.
