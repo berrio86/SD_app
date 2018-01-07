@@ -23,8 +23,8 @@
 
 
 struct servidor servidores[3];
-int sock_comunicacion[3]; // cada servidor tendra su array para guardar los sockets de comunicacion con otros servidores
-int sock_clientes, elkarrizketa, sock_servidores, sock_secundario, nuevo_secundario;
+int sock_comunicacion[3], sock_listas[3]; // cada servidor tendra su array para guardar los sockets de comunicacion con otros servidores
+int sock_clientes, elkarrizketa, sock_servidores, sock_secundario, sock_secundario_listas, nuevo_secundario;
 struct sockaddr_in servidor_dir, primario_dir, clientes_dir, nuevosecundario_dir;
 
 pthread_t trecibir[3];
@@ -95,7 +95,7 @@ int main(int argc, char *argv[]) {
 void establecerParteComun() {
 
     pthread_t tserv;
-
+    memset(&ultimos_recibidos, 0, sizeof(ultimos_recibidos));
     //Crear socket para servidores
     if ((sock_servidores = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         perror("Error al crear el socket");
@@ -186,19 +186,41 @@ void establecerSecundario() {
     mkfifo(myfifo, 0666);
     fifo = open(myfifo, 0666);
 
+    //crear los sockets necesarios
     if ((sock_secundario = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         perror("Error al crear el socket secundario");
         exit(1);
     }
 
+    if ((sock_secundario_listas = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        perror("Error al crear el socket secundario para listas");
+        exit(1);
+    }
+
+    //conectar con primario para la transmision de mensajes
     if (connect(sock_secundario, (struct sockaddr *) &primario_dir, sizeof (primario_dir)) < 0) {
         perror("Error al conectarse con el servidor primario con socket de recepcion de mensajes");
         exit(1);
     } else {
         printf("El secundario se ha conectado al primario con exito con socket de recepcion de mensajes\n");
     }
-    
-    
+
+    if (write(sock_secundario, &puerto, sizeof (puerto)) < 0) {
+        perror("Error al enviar el puerto establecido en el secundario al servidor primario\n");
+        exit(1);
+    } else {
+        printf("El secundario ha enviado el puerto al primario con exito\n");
+    }
+
+    //conectar con el primario para la transmision de listas
+    if (connect(sock_secundario_listas, (struct sockaddr *) &primario_dir, sizeof (primario_dir)) < 0) {
+        perror("Error al conectarse con el servidor primario con socket de recepcion de listas");
+        exit(1);
+    } else {
+        printf("El secundario se ha conectado al primario con exito con socket de recepcion de listas\n");
+    }
+
+
     //crear thread para recibir listas actualizadas de los servidores desde el primario
     if (pthread_create(&trecepcion_lista, NULL, recibirListaDeServidores, NULL)) {
         perror("Error al crear thread de recepcion de lista de servidores");
@@ -213,15 +235,6 @@ void establecerSecundario() {
         exit(1);
     }
 
-    if (write(sock_secundario, &puerto, sizeof (puerto)) < 0) {
-        perror("Error al enviar el puerto establecido en el secundario al servidor primario\n");
-        exit(1);
-    } else {
-        printf("El secundario ha enviado el puerto al primario con exito\n");
-    }
-
-    //aqui tiene que ir la peticion de conexion para las listas
-    
     if (pthread_join(trecepcion_lista, NULL)) {
         perror("\n ERROR joining thread \n");
         exit(1);
@@ -265,14 +278,7 @@ void * establecerSocketServidores(void * a) {
             perror("    Error al conectarse");
             exit(1);
         } else {
-            printf("    Nueva conexion recibida.\n");
-        }
-
-        //crear un thread recibir por cada conexion de secundario, sea servidor primario o secundario
-        *arg = sock_comunicacion[contador_servidores];
-        if (pthread_create(&trecibir[contador_servidores], NULL, recibir, arg)) {
-            perror("    Error al crear thread de recibir");
-            exit(1);
+            printf("\n**** Nueva conexion recibida ****\n");
         }
 
         if (primario == 1) {
@@ -282,11 +288,26 @@ void * establecerSocketServidores(void * a) {
             } else {
                 printf("    El puerto de comunicacion que utiliza el servidor secundario %d, es el %d\n", contador_servidores, puerto_helper);
             }
-            
+
             // Si se quiere mantener otra comunicacion para las listas, se puede establecer aquí
+            if ((sock_listas[contador_servidores] = accept(sock_servidores, (struct sockaddr *) &nuevosecundario_dir, &nuevosecundario_size)) < 0) {
+                perror("    Error al conectarse");
+                exit(1);
+            } else {
+                printf("    Nueva conexion recibida, para la actualización de listas.\n");
+            }
+
             join(nuevosecundario_dir, puerto_helper);
             enviarListaDeServidores();
         }
+
+        //crear un thread recibir por cada conexion de secundario, sea servidor primario o secundario
+        *arg = sock_comunicacion[contador_servidores];
+        if (pthread_create(&trecibir[contador_servidores], NULL, recibir, arg)) {
+            perror("    Error al crear thread de recibir");
+            exit(1);
+        }
+
     }
 }
 
@@ -316,12 +337,14 @@ void leave(int id, struct sockaddr_in dir) {
                 printf("    Elimnando secundario de la lista\n");
                 servidores[i] = servidores[i + 1];
                 sock_comunicacion[i] = sock_comunicacion[i + 1];
+                sock_listas[i] = sock_listas[i + 1];
                 found = 1;
             }
         } else {
             printf("    Recolocando elementos del array\n");
             servidores[i] = servidores[i + 1];
             sock_comunicacion[i] = sock_comunicacion[i + 1];
+            sock_listas[i] = sock_listas[i + 1];
         }
     }
     contador_servidores -= 1;
@@ -332,13 +355,13 @@ void enviarListaDeServidores() {
     printf("\n**** Se está enviando la lista de servidores ****\n");
     int i = 0;
     for (i = 0; i < contador_servidores; i++) {
-        if (write(sock_comunicacion[i], &contador_servidores, sizeof (contador_servidores)) < 0) {
+        if (write(sock_listas[i], &contador_servidores, sizeof (contador_servidores)) < 0) {
             perror("    Error al enviar el contador de servidores");
         } else {
             printf("    Enviando contador de servidores a servidor número %d\n", i);
         }
 
-        if (write(sock_comunicacion[i], &servidores, sizeof (servidores)) < 0) {
+        if (write(sock_listas[i], &servidores, sizeof (servidores)) < 0) {
             perror("    Error al enviar la lista de servidores");
         } else {
             printf("    Enviando lista a servidor número %d\n", i);
@@ -354,26 +377,26 @@ void * recibirListaDeServidores(void * a) {
         while (1) {
             //recibir contador de servidores
             int x;
-            x = read(sock_secundario, &contador_servidores, sizeof (contador_servidores));
+            x = read(sock_secundario_listas, &contador_servidores, sizeof (contador_servidores));
             if (x < 0) {
                 perror("    Error al recibir contador de servidores");
                 exit(1);
             } else if (x == 0) {
                 printf("    Error de conexión: se debe ejecutar funcion leave\n");
-                close(sock_secundario);
+                close(sock_secundario_listas);
                 break;
             } else {
                 printf("    Contador de servidores recibida y actualizada: %d\n", contador_servidores);
             }
 
             //recibir lista de direcciones
-            x = read(sock_secundario, &servidores_helper, sizeof (servidores_helper));
+            x = read(sock_secundario_listas, &servidores_helper, sizeof (servidores_helper));
             if (x < 0) {
                 perror("    Error al recibir lista de servidores");
                 exit(1);
             } else if (x == 0) {
                 printf("    Error de conexión: se debe ejecutar funcion leave\n");
-                close(sock_secundario);
+                close(sock_secundario_listas);
                 break;
             } else {
                 int i;
@@ -430,17 +453,19 @@ void sesioa(int s) {
     egoera = ST_INIT;
 
     while (1) {
-        // Irakurri bezeroak bidalitako mezua.
+
         // primario o secundario aqui, fifo o readline
         if (primario == 1) {
             if ((n = readline(s, buf, MAX_BUF)) <= 0)
                 return;
+            difundir(buf);
         } else {
             //leer desde secundario mediante colas fifo.
-
+            printf("\n**** R_entregando mensaje: R_ENTREGAR ****\n");
+            read(fifo, &buf, sizeof(buf));
+            printf("    Se está entregando mensaje %s\n", mensaje_recibido.valor);
         }
-
-
+        
         // Aztertu jasotako komandoa ezaguna den ala ez.
         if ((komando = bilatu_substring(buf, KOMANDOAK)) < 0) {
             ustegabekoa(s);
@@ -685,7 +710,7 @@ int readline(int stream, char *buf, int tam) {
             return -3;
         buf[guztira++] = c;
         if (cr && c == '\n') {
-            difundir(buf); //implementamos difusion fiable
+            //difundir(buf); //implementamos difusion fiable
             return guztira;
         } else if (c == '\r')
             cr = 1;
@@ -696,45 +721,60 @@ int readline(int stream, char *buf, int tam) {
 }
 
 void * r_entregar(void * a) {
+    /*
     printf("\n**** R_entregando mensaje: R_ENTREGAR ****\n");
     read(fifo, &mensaje_recibido.valor, sizeof (mensaje_recibido.valor));
     printf("    Se está entregando mensaje %d\n", mensaje_recibido.valor);
-
+     */
     //llamar a funcion sesion
+    sesioa(0);
 }
 
-void enviar(int i, struct sockaddr_in servidor) {
-    printf("\n**** Enviando mensaje: ENVIAR ****\n");
-    if (write(sock_comunicacion[i], &mensaje_recibido, sizeof (mensaje_recibido)) < 0) {
+void enviar(int socket) {
+    printf("\n**** Enviando mensaje al socket %d: ENVIAR ****\n", socket);
+    if (write(socket, &mensaje_recibido, sizeof (mensaje_recibido)) < 0) {
         perror("    Error al enviar mensaje al difundir");
     } else {
-        //MIRAR WARNING DE TIPOS
-        //printf("Se está enviando mensaje a la ip: %d\n", inet_aton(servidor.sin_addr.s_addr));
-        printf("    Se está enviando mensaje.\n");
-        printf("    El mensaje enviado es: %d\n", mensaje_recibido.valor);
+        printf("    Se ha enviado el mensaje: %d.\n", mensaje_recibido.cont);
+        printf("    El mensaje enviado es: %s\n", mensaje_recibido.valor);
     }
 }
 
 void difundir(char* msg) {
     printf("\n**** Difundiendo mensaje: DIFUNDIR ****\n");
     mensaje_recibido.cont = contador_mensajes;
-    mensaje_recibido.valor = msg;
-    int i = 0;
-    while (i<sizeof (servidores)) {
-        enviar(i, servidores[i].dir);
-        i++;
+    strcpy(mensaje_recibido.valor, msg);
+    printf("    Se está difundiendo mensaje: %d.\n", mensaje_recibido.cont);
+    printf("    El mensaje difundido es: %s\n", mensaje_recibido.valor);
+    int i;
+    for (i = 0; i < contador_servidores; i++) {
+        enviar(sock_comunicacion[i]);
     }
     contador_mensajes += 1;
+    if(primario != 0){
+        switch (fork()) {
+            case 0:
+                sesioa(0);
+                exit(0);
+            default:
+                break;   
+        }
+    }
+ 
 }
 
 void * recibir(void *a) {
     printf("\n**** Estableciendo thread de lectura de mensajes: RECIBIR ****\n");
     int socket = *((int *) a);
     int x;
+    char ip[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &(servidores[contador_servidores - 1].dir.sin_addr), ip, INET_ADDRSTRLEN);
+    printf("    Direccion IP del servidor de la que escucha este thread es: %s:%d\n", ip, ntohs(servidores[contador_servidores - 1].dir.sin_port));
+    printf("    El socket de escucha en este thread es el: %d\n", socket);
     while (1) {
         x = read(socket, &mensaje_recibido, sizeof (mensaje_recibido));
         if (x < 0) {
-            perror("    Error al recibir contador de servidores");
+            perror("    Error al recibir mensaje");
             exit(1);
         } else if (x == 0) {
             printf("    Error de conexión: se debe ejecutar funcion leave");
@@ -758,11 +798,12 @@ void * recibir(void *a) {
 int chequearMensaje(struct mensaje msg) {
     int aux;
     for (aux = 0; aux < 10; aux++) {
-        if (msg.cont = ultimos_recibidos[aux]) {
-            return 0;
+        printf("Aux: %d\n", ultimos_recibidos[aux]);
+        if (msg.cont == ultimos_recibidos[aux]) {
+            return -1;
         }
     }
-    return -1;
+    return 0;
 }
 
 /*

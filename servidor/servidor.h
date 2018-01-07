@@ -33,7 +33,7 @@ int egoera;
 
 struct mensaje {
     int cont;
-    char valor;
+    char valor[MAX_BUF];
 };
 
 struct servidor {
@@ -60,7 +60,7 @@ void waitFor(unsigned int);
 void *establecerSocketServidores(void *a);
 void *establecerSocketClientes (void *a);
 int chequearMensaje(struct mensaje);
-void enviar(int, struct sockaddr_in);
+void enviar(int);
 void difundir(char*);
 void * recibir(void *a);
 void * r_entregar(void *a);
