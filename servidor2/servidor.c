@@ -24,7 +24,7 @@
 
 struct servidor servidores[3];
 int sock_comunicacion[3]; // cada servidor tendra su array para guardar los sockets de comunicacion con otros servidores
-int sock_clientes, elkarrizketa, sock_servidores, sock_secundario, nuevo_secundario;
+int sock_clientes, elkarrizketa, sock_servidores, sock_secundario, sock_secundario_listas, nuevo_secundario;
 struct sockaddr_in servidor_dir, primario_dir, clientes_dir, nuevosecundario_dir;
 
 pthread_t trecibir[3];
@@ -187,7 +187,12 @@ void establecerSecundario() {
     fifo = open(myfifo, 0666);
 
     if ((sock_secundario = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-        perror("Error al crear el socket secundario");
+        perror("Error al crear el socket de secundarios");
+        exit(1);
+    }
+    
+    if ((sock_secundario_listas = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        perror("Error al crear el socket de secundarios");
         exit(1);
     }
 
@@ -198,7 +203,13 @@ void establecerSecundario() {
         printf("El secundario se ha conectado al primario con exito con socket de recepcion de mensajes\n");
     }
     
-    
+    if (connect(sock_secundario_listas, (struct sockaddr *) &primario_dir, sizeof (primario_dir)) < 0) {
+        perror("Error al conectarse con el servidor primario con socket para recibir listas");
+        exit(1);
+    } else {
+        printf("El secundario se ha conectado al primario con exito  con socket para recibir listas\n");
+    }
+
     //crear thread para recibir listas actualizadas de los servidores desde el primario
     if (pthread_create(&trecepcion_lista, NULL, recibirListaDeServidores, NULL)) {
         perror("Error al crear thread de recepcion de lista de servidores");
@@ -220,8 +231,6 @@ void establecerSecundario() {
         printf("El secundario ha enviado el puerto al primario con exito\n");
     }
 
-    //aqui tiene que ir la peticion de conexion para las listas
-    
     if (pthread_join(trecepcion_lista, NULL)) {
         perror("\n ERROR joining thread \n");
         exit(1);
@@ -282,8 +291,7 @@ void * establecerSocketServidores(void * a) {
             } else {
                 printf("    El puerto de comunicacion que utiliza el servidor secundario %d, es el %d\n", contador_servidores, puerto_helper);
             }
-            
-            // Si se quiere mantener otra comunicacion para las listas, se puede establecer aquí
+
             join(nuevosecundario_dir, puerto_helper);
             enviarListaDeServidores();
         }
@@ -354,26 +362,24 @@ void * recibirListaDeServidores(void * a) {
         while (1) {
             //recibir contador de servidores
             int x;
-            x = read(sock_secundario, &contador_servidores, sizeof (contador_servidores));
+            x = read(sock_secundario_listas, &contador_servidores, sizeof (contador_servidores));
             if (x < 0) {
                 perror("    Error al recibir contador de servidores");
                 exit(1);
             } else if (x == 0) {
-                printf("    Error de conexión: se debe ejecutar funcion leave\n");
-                close(sock_secundario);
+                printf("    Error de conexión: se debe ejecutar funcion leave");
                 break;
             } else {
                 printf("    Contador de servidores recibida y actualizada: %d\n", contador_servidores);
             }
 
             //recibir lista de direcciones
-            x = read(sock_secundario, &servidores_helper, sizeof (servidores_helper));
+            x = read(sock_secundario_listas, &servidores_helper, sizeof (servidores_helper));
             if (x < 0) {
                 perror("    Error al recibir lista de servidores");
                 exit(1);
             } else if (x == 0) {
-                printf("    Error de conexión: se debe ejecutar funcion leave\n");
-                close(sock_secundario);
+                printf("    Error de conexión: se debe ejecutar funcion leave");
                 break;
             } else {
                 int i;
