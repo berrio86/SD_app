@@ -69,6 +69,10 @@ void leave(int, struct sockaddr_in);
 void enviarListaDeServidores();
 void * recibirListaDeServidores(void *a);
 
+//helpers
+void crearThreadRecibir(int);
+void imprimirListaSecundarios();
+void imprimirListaSockets();
 //int sock_addr_cmp_port(struct sockaddr *, struct sockaddr *);
 //int sock_addr_cmp_addr(struct sockaddr *, struct sockaddr *);
 

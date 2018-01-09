@@ -178,7 +178,7 @@ void establecerPrimario() {
 
 void establecerSecundario() {
 
-    pthread_t trecepcion_lista, trecepcion_mensajes, tr_entregar;
+    pthread_t trecepcion_lista, tr_entregar;
     /*ESTO ES PARTE DE LA DE LOS SERVIDORES SECUNDARIOS*/
 
     mensajes_recibidos = 0;
@@ -228,12 +228,7 @@ void establecerSecundario() {
     }
 
     //crear thread para recibir mensajes desde el primario
-    int *arg = malloc(sizeof (*arg));
-    *arg = sock_comunicacion[0];
-    if (pthread_create(&trecepcion_mensajes, NULL, recibir, arg)) {
-        perror("Error al crear thread de recepcion de mensajes desde el primario");
-        exit(1);
-    }
+    crearThreadRecibir(0);
 
     //crear thread para leer de cola FIFO
     if (pthread_create(&tr_entregar, NULL, r_entregar, NULL)) {
@@ -277,25 +272,19 @@ void * establecerSocketServidores(void * a) {
     // No se hara nada al recibir SIG_CHLD. De esta forma los prozesos hijo terminados, no se quedarán tipo zombie
     signal(SIGCHLD, SIG_IGN);
     int puerto_helper;
-    int *arg = malloc(sizeof (*arg));
     while (1) {
         // Aceptar petición de conexión y crear socket
+        imprimirListaSecundarios();
+        imprimirListaSockets();
         if ((sock_comunicacion[contador_servidores] = accept(sock_servidores, (struct sockaddr *) &nuevosecundario_dir, &nuevosecundario_size)) < 0) {
             perror("    Error al conectarse");
             exit(1);
         } else {
             printf("\n**** Nueva conexion recibida ****\n");
         }
-
-        //crear un thread recibir por cada conexion nueva de secundario
-        *arg = sock_comunicacion[contador_servidores];
-
-        if (pthread_create(&trecibir[contador_servidores], NULL, recibir, arg)) {
-            perror("    Error al crear thread de recibir");
-            exit(1);
-        }
-
+        
         if (primario == 1) {
+            //leer puerto del secundario
             if (read(sock_comunicacion[contador_servidores], &puerto_helper, sizeof (puerto_helper)) < 0) {
                 perror("    Error al leer el puerto desde secundario");
                 exit(1);
@@ -313,9 +302,25 @@ void * establecerSocketServidores(void * a) {
 
             join(nuevosecundario_dir, puerto_helper);
             enviarListaDeServidores();
+            contador_servidores += 1;
+            crearThreadRecibir(contador_servidores);
+            
+        } else {
+            crearThreadRecibir(contador_servidores);
         }
     }
 }
+
+void crearThreadRecibir(int x) {
+    //crear un thread recibir por cada conexion nueva de secundario
+    int *arg = malloc(sizeof (*arg));
+    *arg = sock_comunicacion[x];
+    if (pthread_create(&trecibir[x], NULL, recibir, arg)) {
+        perror("    Error al crear thread de recibir");
+        exit(1);
+    }
+}
+
 
 void join(struct sockaddr_in dir, int puerto_escucha) {
     printf("\n**** Se está actualizando la lista de servidores: JOIN ****\n");
@@ -324,9 +329,8 @@ void join(struct sockaddr_in dir, int puerto_escucha) {
     servidores[contador_servidores].id = contador_servidores;
     servidores[contador_servidores].dir = dir;
     servidores[contador_servidores].dir.sin_port = htons(puerto_escucha);
-    contador_servidores += 1;
     int i;
-    for (i = 0; i < contador_servidores; i++) {
+    for (i = 0; i <= contador_servidores; i++) {
         inet_ntop(AF_INET, &(servidores[i].dir.sin_addr), ip, INET_ADDRSTRLEN);
         printf("    Direccion IP del servidor %d: %s:%d\n", i, ip, ntohs(servidores[i].dir.sin_port));
         printf("    Identificador del socket de %s: %d\n", ip, sock_comunicacion[i]);
@@ -337,7 +341,7 @@ void leave(int id, struct sockaddr_in dir) {
     printf("\n**** Se está actualizando la lista de servidores: LEAVE ****\n");
     int i = 0;
     int found = 0;
-    for (i = 0; i < contador_servidores; i++) {
+    for (i = 0; i <= contador_servidores; i++) {
         if (found == 0) {
             if (servidores[i].id == id) {
                 printf("    Elimnando secundario de la lista\n");
@@ -409,7 +413,7 @@ void * recibirListaDeServidores(void * a) {
                 break;
             } else {
                 int i;
-                for (i = 0; i < contador_servidores; i++) {
+                for (i = 0; i <= contador_servidores; i++) {
                     servidores[i] = servidores_helper[i];
                     inet_ntop(AF_INET, &(servidores[i].dir.sin_addr), ip, INET_ADDRSTRLEN);
                     printf("    Direccion IP del servidor %d: %s:%d\n", i, ip, ntohs(servidores[i].dir.sin_port));
@@ -419,11 +423,12 @@ void * recibirListaDeServidores(void * a) {
 
             //si es el ultimo secundario en conectarse, hacer peticiones de conexion al resto de secundarios
             if (nuevo_secundario == 1) {
+                nuevo_secundario = 0;
                 int i;
                 // empieza desde 1 porque el 0 es el socket del servidor primario
                 // termina en contador_servidores - 1, porque la ultima direccion es el del nuevo secundario, es decir, uno mismo si nuevo_secundario == 0
                 // se podría mejorar, pero no he conseguido comparar direcciones sockaddr_in...
-                for (i = 1; i < contador_servidores - 1; i++) {
+                for (i = 1; i <= contador_servidores; i++) {
                     printf("    Haciendo peticiones de comunicacion a servidores secundarios\n");
                     if ((sock_comunicacion[i] = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
                         perror("    Error al crear el socket de comunicacion entre secundarios");
@@ -438,12 +443,11 @@ void * recibirListaDeServidores(void * a) {
                     //crear un thread para recibir mensajes desde el socket correspondiente
                     int *arg = malloc(sizeof (*arg));
                     *arg = sock_comunicacion[i];
-                    if (pthread_create(&trecibir[contador_servidores], NULL, recibir, arg)) {
-                        perror("Error al crear thread de recepcion de mensajes desde el primario");
+                    if (pthread_create(&trecibir[i], NULL, recibir, arg)) {
+                        perror("Error al crear thread de recepcion de mensajes desde secundario");
                         exit(1);
                     }
                 }
-                nuevo_secundario = 0;
             }
         }
     }
@@ -775,21 +779,30 @@ void difundir(char* msg) {
 
 }
 
+void imprimirListaSecundarios(){
+    int i, puerto_helper;
+    char ip[INET_ADDRSTRLEN];
+    for(i=0; i<3; i++){
+        inet_ntop(AF_INET, &(servidores[i].dir.sin_addr), ip, INET_ADDRSTRLEN);
+        puerto_helper = ntohs(servidores[i].dir.sin_port);
+        printf("Posicion %d: %s:%d\n", i, ip, puerto_helper);
+    }
+}
+
+void imprimirListaSockets(){
+    int i;
+    for(i=0;i<3; i++){
+        printf("Posicion %d: %d\n",i,sock_comunicacion[i]);
+    }
+}
+
 void * recibir(void *a) {
     int socket = *((int *) a);
+    //a veces ni siquiera se pasa bien el identificador del socket
     printf("\n**** Estableciendo thread de lectura de mensajes en %d: RECIBIR ****\n", socket);
     int x, puerto_helper;
     struct mensaje mensaje_recibido;
     char ip[INET_ADDRSTRLEN];
-
-    //Esto no siempre imprime la informacion correcta por el uso de los threads
-    // El primario siempre debería imprimir informacion correcta
-    // El secundario, imprimirá la primera posicion de forma correcta
-    inet_ntop(AF_INET, &(servidores[contador_servidores].dir.sin_addr), ip, INET_ADDRSTRLEN);
-    puerto_helper = ntohs(servidores[contador_servidores].dir.sin_port);
-
-
-    printf("    El socket de escucha en este thread es el: %d \n Direccion IP del servidor de la que escucha este thread es: %s:%d\n", socket, ip, puerto_helper);
 
     while (1) {
         x = read(socket, &mensaje_recibido, sizeof (mensaje_recibido));
