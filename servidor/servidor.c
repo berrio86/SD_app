@@ -22,31 +22,33 @@
 #include "servidor.h"
 
 
-struct servidor servidores[3];
-int sock_comunicacion[3], sock_listas[3]; // cada servidor tendra su array para guardar los sockets de comunicacion con otros servidores
-int sock_clientes, elkarrizketa, sock_servidores, sock_secundario, sock_secundario_listas, nuevo_secundario;
-struct sockaddr_in servidor_dir, primario_dir, clientes_dir, nuevosecundario_dir;
+struct servidor servidores[3]; // cada servidor tendra su array en las que se guardaran las direcciones todos los servidores secundarios
+int sock_comunicacion[3]; // cada servidor tendra su array para guardar los sockets de comunicacion con otros servidores
+int sock_listas[3]; // solo el servidor hará uso de este array, que guardara los sockets secundarios para la actualizacion de listas
+int sock_secundario_listas; //solo tienen este socket los secundarios. Se usa para recibir la lista de los servidores del primario
+int sock_clientes, elkarrizketa, sock_servidores; //sockets auxiliares
+struct sockaddr_in servidor_dir; //servidor_dir para que cada uno guarde su direccion
+struct sockaddr_in primario_dir; //primario_dir para guardar la direccion del primario, solo utilizado por secundarios
+struct sockaddr_in clientes_dir, nuevosecundario_dir; // auxiliares 
 
-pthread_t trecibir[3];
+int primario, puerto, contador_servidores, nuevo_secundario; //booleans y contadores
+pthread_t trecibir[3]; //threads para 
 
 socklen_t helb_tam, nuevosecundario_size;
-int primario, puerto, contador_servidores;
 
-int fifo;
-char myfifo[10];
+int fifo; // file descriptor para el fifo
+char myfifo[10]; // string para el nombre del fifo, que será el puerto que le asignemos nosotros al iniciar
 
 int ultimos_recibidos[10];
 int mensajes_recibidos;
 int contador_mensajes;
-
-char buf[MAX_BUF];
 
 int main(int argc, char *argv[]) {
 
     primario = 0;
     contador_servidores = 0;
     contador_mensajes = 1;
-    nuevo_secundario = 0;
+    nuevo_secundario = 1;
 
     if (argc == 1) {
         printf("**** Estableciendo servidor primario. ****\n");
@@ -186,7 +188,7 @@ void establecerSecundario() {
     fifo = open(myfifo, 0666);
 
     //crear los sockets necesarios
-    if ((sock_secundario = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+    if ((sock_comunicacion[0] = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         perror("Error al crear el socket secundario");
         exit(1);
     }
@@ -197,14 +199,14 @@ void establecerSecundario() {
     }
 
     //conectar con primario para la transmision de mensajes
-    if (connect(sock_secundario, (struct sockaddr *) &primario_dir, sizeof (primario_dir)) < 0) {
+    if (connect(sock_comunicacion[0], (struct sockaddr *) &primario_dir, sizeof (primario_dir)) < 0) {
         perror("Error al conectarse con el servidor primario con socket de recepcion de mensajes");
         exit(1);
     } else {
         printf("El secundario se ha conectado al primario con exito con socket de recepcion de mensajes\n");
     }
 
-    if (write(sock_secundario, &puerto, sizeof (puerto)) < 0) {
+    if (write(sock_comunicacion[0], &puerto, sizeof (puerto)) < 0) {
         perror("Error al enviar el puerto establecido en el secundario al servidor primario\n");
         exit(1);
     } else {
@@ -219,7 +221,6 @@ void establecerSecundario() {
         printf("El secundario se ha conectado al primario con exito con socket de recepcion de listas\n");
     }
 
-
     //crear thread para recibir listas actualizadas de los servidores desde el primario
     if (pthread_create(&trecepcion_lista, NULL, recibirListaDeServidores, NULL)) {
         perror("Error al crear thread de recepcion de lista de servidores");
@@ -228,12 +229,12 @@ void establecerSecundario() {
 
     //crear thread para recibir mensajes desde el primario
     int *arg = malloc(sizeof (*arg));
-    *arg = sock_secundario;
+    *arg = sock_comunicacion[0];
     if (pthread_create(&trecepcion_mensajes, NULL, recibir, arg)) {
         perror("Error al crear thread de recepcion de mensajes desde el primario");
         exit(1);
     }
-    
+
     //crear thread para leer de cola FIFO
     if (pthread_create(&tr_entregar, NULL, r_entregar, NULL)) {
         perror("Error al crear thread de recepcion de lista de servidores");
@@ -286,6 +287,14 @@ void * establecerSocketServidores(void * a) {
             printf("\n**** Nueva conexion recibida ****\n");
         }
 
+        //crear un thread recibir por cada conexion nueva de secundario
+        *arg = sock_comunicacion[contador_servidores];
+
+        if (pthread_create(&trecibir[contador_servidores], NULL, recibir, arg)) {
+            perror("    Error al crear thread de recibir");
+            exit(1);
+        }
+
         if (primario == 1) {
             if (read(sock_comunicacion[contador_servidores], &puerto_helper, sizeof (puerto_helper)) < 0) {
                 perror("    Error al leer el puerto desde secundario");
@@ -302,21 +311,9 @@ void * establecerSocketServidores(void * a) {
                 printf("    Nueva conexion recibida, para la actualización de listas.\n");
             }
 
-
-        } else {
-            //crear un thread recibir por cada conexion de secundario, entre los servidores secundarios
-            *arg = sock_comunicacion[contador_servidores];
-            if (pthread_create(&trecibir[contador_servidores], NULL, recibir, arg)) {
-                perror("    Error al crear thread de recibir");
-                exit(1);
-            }
-        }
-
-        if (primario == 1) {
             join(nuevosecundario_dir, puerto_helper);
             enviarListaDeServidores();
         }
-
     }
 }
 
@@ -368,7 +365,7 @@ void enviarListaDeServidores() {
             perror("    Error al enviar el contador de servidores");
             exit(1);
         } else {
-            printf("    Enviando contador de servidores a servidor número %d\n", i);
+            printf("    Enviando contador de servidores (%d) a servidor número %d\n", contador_servidores, i);
         }
 
         if (write(sock_listas[i], &servidores, sizeof (servidores)) < 0) {
@@ -394,6 +391,7 @@ void * recibirListaDeServidores(void * a) {
                 exit(1);
             } else if (x == 0) {
                 printf("    Error de conexión: se debe ejecutar funcion leave\n");
+                //leave
                 close(sock_secundario_listas);
                 break;
             } else {
@@ -420,9 +418,12 @@ void * recibirListaDeServidores(void * a) {
             }
 
             //si es el ultimo secundario en conectarse, hacer peticiones de conexion al resto de secundarios
-            if (nuevo_secundario == 0) {
+            if (nuevo_secundario == 1) {
                 int i;
-                for (i = 0; i < contador_servidores - 1; i++) {
+                // empieza desde 1 porque el 0 es el socket del servidor primario
+                // termina en contador_servidores - 1, porque la ultima direccion es el del nuevo secundario, es decir, uno mismo si nuevo_secundario == 0
+                // se podría mejorar, pero no he conseguido comparar direcciones sockaddr_in...
+                for (i = 1; i < contador_servidores - 1; i++) {
                     printf("    Haciendo peticiones de comunicacion a servidores secundarios\n");
                     if ((sock_comunicacion[i] = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
                         perror("    Error al crear el socket de comunicacion entre secundarios");
@@ -442,7 +443,7 @@ void * recibirListaDeServidores(void * a) {
                         exit(1);
                     }
                 }
-                nuevo_secundario = 1;
+                nuevo_secundario = 0;
             }
         }
     }
@@ -473,7 +474,7 @@ void sesioa(int s) {
         } else {
             //leer desde secundario mediante colas fifo.
             printf("\n**** R_entregando mensaje: R_ENTREGAR ****\n");
-            read(fifo, &buf, sizeof (buf));
+            //read(fifo, &buf, sizeof (buf));
             printf("    Se está entregando mensaje %s\n", buf);
         }
 
@@ -721,7 +722,6 @@ int readline(int stream, char *buf, int tam) {
             return -3;
         buf[guztira++] = c;
         if (cr && c == '\n') {
-            //difundir(buf); //implementamos difusion fiable
             return guztira;
         } else if (c == '\r')
             cr = 1;
@@ -760,30 +760,37 @@ void difundir(char* msg) {
     strcpy(mensaje.valor, msg);
     printf("    Se está difundiendo mensaje: %d.\n", mensaje.cont);
     printf("    El mensaje difundido es: %s\n", mensaje.valor);
-    
+
     int i;
     if (primario == 1) {
         for (i = 0; i < contador_servidores; i++) {
             enviar(sock_comunicacion[i], mensaje);
         }
-        contador_mensajes ++;
+        contador_mensajes++;
     } else {
         for (i = 0; i < contador_servidores - 1; i++) {
             enviar(sock_comunicacion[i], mensaje);
         }
     }
-    
+
 }
 
 void * recibir(void *a) {
-    printf("\n**** Estableciendo thread de lectura de mensajes: RECIBIR ****\n");
     int socket = *((int *) a);
-    int x;
+    printf("\n**** Estableciendo thread de lectura de mensajes en %d: RECIBIR ****\n", socket);
+    int x, puerto_helper;
     struct mensaje mensaje_recibido;
     char ip[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &(servidores[contador_servidores - 1].dir.sin_addr), ip, INET_ADDRSTRLEN);
-    printf("    Direccion IP del servidor de la que escucha este thread es: %s:%d\n", ip, ntohs(servidores[contador_servidores - 1].dir.sin_port));
-    printf("    El socket de escucha en este thread es el: %d\n", socket);
+
+    //Esto no siempre imprime la informacion correcta por el uso de los threads
+    // El primario siempre debería imprimir informacion correcta
+    // El secundario, imprimirá la primera posicion de forma correcta
+    inet_ntop(AF_INET, &(servidores[contador_servidores].dir.sin_addr), ip, INET_ADDRSTRLEN);
+    puerto_helper = ntohs(servidores[contador_servidores].dir.sin_port);
+
+
+    printf("    El socket de escucha en este thread es el: %d \n Direccion IP del servidor de la que escucha este thread es: %s:%d\n", socket, ip, puerto_helper);
+
     while (1) {
         x = read(socket, &mensaje_recibido, sizeof (mensaje_recibido));
         if (x < 0) {
