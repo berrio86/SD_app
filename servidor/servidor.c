@@ -191,10 +191,10 @@ void establecerSecundario() {
     fifo = open(myfifo, 0666);
 
     //crear thread para leer de cola FIFO
-    if (pthread_create(&tr_entregar, NULL, r_entregar, NULL)) {
+    /*if (pthread_create(&tr_entregar, NULL, r_entregar, NULL)) {
         perror("    Error al crear thread de recepcion de lista de servidores");
         exit(1);
-    }
+    }*/
 
     //crear los sockets necesarios
     if ((sock_comunicacion[0] = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -244,10 +244,13 @@ void establecerSecundario() {
         exit(1);
     }
 
+    sesioa(0);
+
     if (pthread_join(trecepcion_lista, NULL)) {
         perror("\n ERROR joining thread \n");
         exit(1);
     }
+
 }
 
 void * establecerSocketClientes(void * a) {
@@ -265,12 +268,25 @@ void * establecerSocketClientes(void * a) {
         // Crear procesos hijo para conectar con cliente
         switch (fork()) {
             case 0:
+                //esto es lo que ya habia
                 close(sock_clientes);
-                //llamar a thread recibir de cliente con parametro elkarrizketa
-                //De alguna forma llamar a secundarios para que hagan un fork
                 sesioa(elkarrizketa);
                 close(elkarrizketa);
                 exit(0);
+
+                //esto es lo que se ha escrito
+                /*close(sock_clientes);
+                //De alguna forma llamar a secundarios para que hagan un fork
+                //llamar a thread recibir de cliente con parametro elkarrizketa
+                int *arg = malloc(sizeof (*arg));
+                *arg = elkarrizketa;
+                if (pthread_create(&trecibir[0], NULL, recibirDelCliente, arg)) {
+                    perror("    Error al crear thread de recibir del cliente");
+                    exit(1);
+                }
+                sesioa(0);
+                close(elkarrizketa);
+                exit(0);*/
             default:
                 close(elkarrizketa);
         }
@@ -415,7 +431,7 @@ void * recibirListaDeServidores(void * a) {
             int x;
             x = read(sock_secundario_listas, &contador_servidores, sizeof (contador_servidores));
             if (x < 0) {
-                perror("    Error al recibir contador de servidores\n");
+                perror("    Error al recibir contador de servidores, el error es en el primario\n");
                 exit(1);
             } else if (x == 0) {
                 printf("    Error de conexión: se debe ejecutar funcion leave: socket_listas\n");
@@ -429,7 +445,7 @@ void * recibirListaDeServidores(void * a) {
             //recibir lista de direcciones
             x = read(sock_secundario_listas, &servidores_helper, sizeof (servidores_helper));
             if (x < 0) {
-                perror("    Error al recibir lista de servidores\n");
+                perror("    Error al recibir lista de servidores, el error es en el primario\n");
                 exit(1);
             } else if (x == 0) {
                 printf("    Error de conexión: se debe ejecutar funcion leave: socket_listas\n");
@@ -458,7 +474,7 @@ void * recibirListaDeServidores(void * a) {
                         perror("    Error al crear el socket de comunicacion entre secundarios");
                         exit(1);
                     }
-                    if (connect(sock_comunicacion[i], (struct sockaddr *) &servidores[i - 1].dir, sizeof(servidores[i - 1].dir)) < 0) {
+                    if (connect(sock_comunicacion[i], (struct sockaddr *) &servidores[i - 1].dir, sizeof (servidores[i - 1].dir)) < 0) {
                         perror("    Error al conectarse con el servidor secundario");
                         exit(1);
                     } else {
@@ -503,8 +519,8 @@ void sesioa(int s) {
             difundir(buf);
         } else {
             //leer desde secundario mediante colas fifo.
+            read(fifo, &buf, sizeof (buf));
             printf("\n**** R_entregando mensaje: R_ENTREGAR ****\n");
-            //read(fifo, &buf, sizeof (buf));
             printf("    Se está entregando mensaje %s\n", buf);
         }
 
@@ -761,6 +777,20 @@ int readline(int stream, char *buf, int tam) {
     return -2;
 }
 
+void * recibirDelCliente(void *a) {
+    char buf[MAX_BUF];
+    int socket = *((int *) a);
+    int n;
+    while (1) {
+        //leer del socket creado por el subproceso
+        n = readline(socket, buf, MAX_BUF);
+        //escibir en cola fifo
+        write(fifo, buf, sizeof(MAX_BUF));
+        //difundir
+        difundir(buf);
+    }
+}
+
 void * r_entregar(void * a) {
     struct mensaje mensaje_a_entregar;
     while (1) {
@@ -839,14 +869,6 @@ void imprimirListaSockets() {
     }
 }
 
-void * recibirDeCliente(void *a) {
-    while (1) {
-        //leer del socket creado por el subproceso
-        //difundir
-        //escibir en cola fifo
-    }
-}
-
 void * recibir(void *a) {
     int socket = *((int *) a);
     //a veces ni siquiera se pasa bien el identificador del socket
@@ -876,11 +898,11 @@ void * recibir(void *a) {
                 difundir(mensaje_recibido.valor);
 
                 //añadimos el identificador del mensaje recibido a la lista de los ultimos 10 recibidos.
-                
+
                 memset(&mensaje_recibido, 0, sizeof (mensaje_recibido));
             }
             imprimirListaMensajes();
-        }   
+        }
     }
 }
 
