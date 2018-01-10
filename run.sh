@@ -1,5 +1,20 @@
 #/bin/bash
 
+fuser -k 6012/tcp
+fuser -k 6013/tcp
+fuser -k 6014/tcp
+fuser -k 6015/tcp
+fuser -k 6016/tcp
+
+rm -r ./servidor1
+rm -r ./servidor2
+rm -r ./servidor3
+
+rm -r ./cliente/files/*
+rm -r ./servidor/files/*
+
+gcc -pthread -o ./servidor/servidor ./servidor/servidor.c
+
 cp -r servidor servidor1
 cp -r servidor servidor2
 cp -r servidor servidor3

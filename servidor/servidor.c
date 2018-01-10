@@ -851,9 +851,8 @@ void * recibir(void *a) {
     int socket = *((int *) a);
     //a veces ni siquiera se pasa bien el identificador del socket
     printf("\n**** Estableciendo thread de lectura de mensajes en %d: RECIBIR ****\n", socket);
-    int x, puerto_helper;
+    int x;
     struct mensaje mensaje_recibido;
-    char ip[INET_ADDRSTRLEN];
 
     while (1) {
         x = read(socket, &mensaje_recibido, sizeof (mensaje_recibido));
@@ -868,6 +867,8 @@ void * recibir(void *a) {
             if (chequearMensaje(mensaje_recibido) < 0) {
                 printf("    El mensaje %d está en la lista de mensajes recibidos \n", mensaje_recibido.cont);
             } else {
+                mensajes_recibidos = (mensajes_recibidos + 1) % 10; //aplicamos el modulo para que siempre tenga un valor entre 0 y 9
+                ultimos_recibidos[mensajes_recibidos] = mensaje_recibido.cont;
                 //difusion fiable entre secundarios, si el mensaje no ha sido recibido, se mete en la cola fifo, se difunde y se trata la peticion
                 contador_mensajes = mensaje_recibido.cont;
                 printf("    El mensaje %d se meterá en una cola fifo \n", mensaje_recibido.cont);
@@ -875,8 +876,7 @@ void * recibir(void *a) {
                 difundir(mensaje_recibido.valor);
 
                 //añadimos el identificador del mensaje recibido a la lista de los ultimos 10 recibidos.
-                mensajes_recibidos = (mensajes_recibidos + 1) % 10; //aplicamos el modulo para que siempre tenga un valor entre 0 y 9
-                ultimos_recibidos[mensajes_recibidos] = mensaje_recibido.cont;
+                
                 memset(&mensaje_recibido, 0, sizeof (mensaje_recibido));
             }
             imprimirListaMensajes();
