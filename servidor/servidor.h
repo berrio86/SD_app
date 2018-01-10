@@ -63,6 +63,7 @@ int chequearMensaje(struct mensaje);
 void enviar(int, struct mensaje);
 void difundir(char*);
 void * recibir(void *a);
+void * recibirDelCliente(void *a);
 void * r_entregar(void *a);
 void join(struct sockaddr_in, int);
 void leave(int, struct sockaddr_in);
@@ -70,9 +71,9 @@ void enviarListaDeServidores();
 void * recibirListaDeServidores(void *a);
 
 //helpers
-void crearThreadRecibir(int);
 void imprimirListaSecundarios();
 void imprimirListaSockets();
+void imprimirListaMensajes();
 //int sock_addr_cmp_port(struct sockaddr *, struct sockaddr *);
 //int sock_addr_cmp_addr(struct sockaddr *, struct sockaddr *);
 
