@@ -66,7 +66,7 @@ void * recibir(void *a);
 void * recibirDelCliente(void *a);
 void * r_entregar(void *a);
 void join(struct sockaddr_in, int);
-void leave(int, struct sockaddr_in);
+void leave(int);//, struct sockaddr_in);
 void enviarListaDeServidores();
 void * recibirListaDeServidores(void *a);
 

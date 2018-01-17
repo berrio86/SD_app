@@ -312,6 +312,7 @@ void * establecerSocketServidores(void * a) {
             //Crear thread recibir en el socket que ha recibido la peticion
             int *arg = malloc(sizeof (*arg));
             *arg = sock_comunicacion[contador_servidores];
+            printf("**** Thread de la conexion creado ****\n");
             if (pthread_create(&trecibir[contador_servidores], NULL, recibir, arg)) {
                 perror("    Error al crear thread de recibir");
                 exit(1);
@@ -334,7 +335,8 @@ void * establecerSocketServidores(void * a) {
             }
 
             join(nuevosecundario_dir, puerto_helper);
-            contador_servidores += 1;
+            contador_servidores = contador_servidores+1;
+            printf("    Contador de servidores actualizado = %d\n", contador_servidores);
             enviarListaDeServidores();
 
         } else {
@@ -377,14 +379,15 @@ void join(struct sockaddr_in dir, int puerto_escucha) {
     }
 }
 
-void leave(int id, struct sockaddr_in dir) {
+void leave(int id) { //, struct sockaddr_in dir) {
     printf("\n**** Se está actualizando la lista de servidores: LEAVE ****\n");
     int i = 0;
     int found = 0;
     for (i = 0; i <= contador_servidores; i++) {
+    	printf("\n* Buscando servidor(%d) %d/%d... *\n", id, i, contador_servidores);
         if (found == 0) {
             if (servidores[i].id == id) {
-                printf("    Elimnando secundario de la lista\n");
+                printf("    Eliminando secundario de la lista\n");
                 servidores[i] = servidores[i + 1];
                 sock_comunicacion[i] = sock_comunicacion[i + 1];
                 sock_listas[i] = sock_listas[i + 1];
@@ -508,6 +511,7 @@ void sesioa(int s) {
 
     // Zehaztu uneko egoera bezala hasierako egoera.
     egoera = ST_INIT;
+    int len;
 
     while (1) {
 
@@ -516,20 +520,25 @@ void sesioa(int s) {
         if (primario == 1) {
             if ((n = readline(s, buf, MAX_BUF)) <= 0)
                 return;
+            printf("\n**** se ha recibido el mensaje: '%s' ****\n", buf);
             difundir(buf);
         } else {
             //leer desde secundario mediante colas fifo.
             read(fifo, &buf, sizeof (buf));
             printf("\n**** R_entregando mensaje: R_ENTREGAR ****\n");
-            printf("    Se está entregando mensaje %s\n", buf);
+            printf("    Se está entregando mensaje '%s'\n", buf);
+            n = strlen(buf);
         }
-
+	
         // Aztertu jasotako komandoa ezaguna den ala ez.
         if ((komando = bilatu_substring(buf, KOMANDOAK)) < 0) {
             ustegabekoa(s);
             continue;
         }
 
+	  len = strlen(buf);
+    	  printf("    Tamaño mensaje a tratar: %d\n", len);
+	  printf("\n**** komando: '%d' ****\n", komando);
         // Jasotako komandoaren arabera egin beharrekoa egin.
         switch (komando) {
             case COM_USER:
@@ -546,6 +555,7 @@ void sesioa(int s) {
                     write(s, "OK\r\n", 4);
                     egoera = ST_AUTH;
                 }
+                printf("\n**** erab: '%d' ****\n", erabiltzaile);
                 break;
             case COM_PASS:
                 if (egoera != ST_AUTH) // Egiaztatu esperotako egoeran jaso dela komandoa.
@@ -809,24 +819,28 @@ void enviar(int socket, struct mensaje msg) {
         perror("    Error al enviar mensaje al difundir");
     } else {
         printf("    Se ha enviado el mensaje: %d.\n", msg.cont);
-        printf("    El mensaje enviado es: %s\n", msg.valor);
+        printf("    El mensaje enviado es: '%s'\n", msg.valor);
     }
 }
 
 void difundir(char* msg) {
     printf("\n**** Difundiendo mensaje: DIFUNDIR ****\n");
+    int len = strlen(msg);
+    printf("    Tamaño mensaje para difundir: %d\n", len);
     struct mensaje mensaje;
     mensaje.cont = contador_mensajes;
     strcpy(mensaje.valor, msg);
     printf("    Se está difundiendo mensaje: %d.\n", mensaje.cont);
-    printf("    El mensaje difundido es: %s\n", mensaje.valor);
+    printf("    El mensaje difundido es: '%s'\n", mensaje.valor);
+    len = strlen(mensaje.valor);
+    printf("    Tamaño mensaje difundido: %d\n", len);
 
     int i;
 
 
     if (primario == 1) {
-        mensajes_recibidos = (mensajes_recibidos + 1) % 10;
         ultimos_recibidos[mensajes_recibidos] = mensaje.cont;
+        mensajes_recibidos = (mensajes_recibidos + 1) % 10;
         for (i = 0; i < contador_servidores; i++) {
             enviar(sock_comunicacion[i], mensaje);
         }
@@ -857,7 +871,7 @@ void imprimirListaSecundarios() {
     for (i = 0; i < 3; i++) {
         inet_ntop(AF_INET, &(servidores[i].dir.sin_addr), ip, INET_ADDRSTRLEN);
         puerto_helper = ntohs(servidores[i].dir.sin_port);
-        printf("    Posicion %d: %s:%d\n", i, ip, puerto_helper);
+        printf("    Posicion %d: ID.%d - %s:%d\n", i, servidores[i].id, ip, puerto_helper);
     }
 }
 
@@ -878,19 +892,30 @@ void * recibir(void *a) {
 
     while (1) {
         x = read(socket, &mensaje_recibido, sizeof (mensaje_recibido));
+        int len = strlen(mensaje_recibido.valor);
+        printf("tamaño mensaje recibido: %d\n", len);
         if (x < 0) {
             perror("    Error al recibir mensaje\n");
             exit(1);
         } else if (x == 0) {
             printf("    Error de conexión: se debe ejecutar funcion leave: socket_recibir %d\n", socket);
+            if (primario == 1) {
+            	int b, aux;
+    			for (b = 0; b < 3; b++) {
+       		if (sock_comunicacion[b] == socket) 
+       			aux = b;
+   		 }
+             leave(aux);
+             enviarListaDeServidores();
+            }
             break;
         } else {
             printf("\n**** Recibiendo mensaje %d desde socket %d: RECIBIR ****\n", mensaje_recibido.cont, socket);
             if (chequearMensaje(mensaje_recibido) < 0) {
                 printf("    El mensaje %d está en la lista de mensajes recibidos \n", mensaje_recibido.cont);
             } else {
-                mensajes_recibidos = (mensajes_recibidos + 1) % 10; //aplicamos el modulo para que siempre tenga un valor entre 0 y 9
                 ultimos_recibidos[mensajes_recibidos] = mensaje_recibido.cont;
+                mensajes_recibidos = (mensajes_recibidos + 1) % 10; //aplicamos el modulo para que siempre tenga un valor entre 0 y 9
                 //difusion fiable entre secundarios, si el mensaje no ha sido recibido, se mete en la cola fifo, se difunde y se trata la peticion
                 contador_mensajes = mensaje_recibido.cont;
                 printf("    El mensaje %d se meterá en una cola fifo \n", mensaje_recibido.cont);
@@ -923,6 +948,8 @@ int chequearMensaje(struct mensaje msg) {
 
 int bilatu_string(char *string, char **string_zerr) {
     int i = 0;
+    int len = strlen(string);
+    printf("se esta buscando: %s medida %d", string, len);
     while (string_zerr[i] != NULL) {
         if (!strcmp(string, string_zerr[i]))
             return i;
